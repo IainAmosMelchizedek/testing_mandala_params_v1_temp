@@ -103,7 +103,7 @@ class MandalaGenerator {
             for (let sym = 0; sym < this.symmetry; sym++) {
                 // Positive angle here distributes segments evenly around the circle.
                 // The counterclockwise effect comes from the global rotation above, not here.
-                const angle = (Math.PI * 2 * sym) / this.symmetry;
+                const angle = -(Math.PI * 2 * sym) / this.symmetry;
                 this.ctx.save();
                 this.ctx.translate(this.centerX, this.centerY);
                 this.ctx.rotate(angle);
