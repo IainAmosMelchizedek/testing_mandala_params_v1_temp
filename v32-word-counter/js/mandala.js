@@ -228,7 +228,7 @@ class MandalaGenerator {
 
             // Negative value = counterclockwise. Magnitude kept subtle so rotation
             // feels meditative rather than mechanical.
-            const rotation = -(this.time * 0.25);
+            const rotation = -(this.time * 0.8);
 
             this.drawMandala(pulse, rotation);
             this.animationFrame = requestAnimationFrame(animate);
