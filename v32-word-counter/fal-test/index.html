@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intention Keeper - Flux Pro Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #f39c12;
+            font-size: 2em;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #95a5a6;
+            font-style: italic;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(243,156,18,0.3);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            color: #f39c12;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0,0,0,0.3);
+            border: 2px solid rgba(243,156,18,0.5);
+            border-radius: 8px;
+            color: #e0e0e0;
+            font-size: 1em;
+            font-family: inherit;
+            margin-bottom: 15px;
+        }
+
+        input[type="password"] {
+            font-family: monospace;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #f39c12;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(243,156,18,0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .params-display {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(149,165,166,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 0.85em;
+            color: #95a5a6;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .params-display span {
+            color: #f39c12;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .status.loading {
+            background: rgba(243,156,18,0.15);
+            border: 1px solid rgba(243,156,18,0.5);
+            color: #f39c12;
+            display: block;
+        }
+
+        .status.error {
+            background: rgba(220,20,60,0.15);
+            border: 1px solid rgba(220,20,60,0.5);
+            color: #ff4444;
+            display: block;
+        }
+
+        .result-image {
+            width: 100%;
+            border-radius: 8px;
+            border: 2px solid rgba(155,89,182,0.5);
+            box-shadow: 0 0 30px rgba(155,89,182,0.3);
+            display: none;
+        }
+
+        .prompt-display {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(155,89,182,0.3);
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 0.85em;
+            color: #9b59b6;
+            margin-top: 15px;
+            display: none;
+            line-height: 1.6;
+        }
+
+        .warning {
+            background: rgba(220,20,60,0.1);
+            border: 1px solid rgba(220,20,60,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.85em;
+            color: #ff6b6b;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Intention Keeper</h1>
+        <p class="subtitle">Flux Pro Sacred Geometry Test</p>
+
+        <!-- API Key Input -->
+        <div class="card">
+            <label>fal.ai API Key</label>
+            <div class="warning">
+                ⚠️ This is a test only. Never share your API key publicly.
+                This page is for local testing — do not share this URL with anyone.
+            </div>
+            <input type="password" id="apiKey" placeholder="Enter your fal.ai API key..." />
+
+            <label>Your Intention (max 50 words)</label>
+            <textarea id="intentionInput" rows="3" placeholder="Type your intention here..."></textarea>
+            <div style="text-align:right; font-size:0.85em; color:#95a5a6; margin-top:-10px; margin-bottom:15px;">
+                <span id="wordCount" style="color:#f39c12;">0</span> / 50 words
+            </div>
+
+            <button id="generateBtn">Generate Sacred Geometry with Flux Pro</button>
+        </div>
+
+        <!-- Hash Parameters Display -->
+        <div class="params-display" id="paramsDisplay">
+            <div>MERIDIAN-HASH: <span id="hashDisplay"></span></div>
+            <div>Symmetry: <span id="symDisplay"></span>-fold</div>
+            <div>Rings: <span id="ringsDisplay"></span></div>
+            <div>Base Hue: <span id="hueDisplay"></span>°</div>
+            <div>Complexity: <span id="complexityDisplay"></span></div>
+            <div>Pulse Amplitude: <span id="pulseDisplay"></span></div>
+            <div>Points: <span id="pointsDisplay"></span></div>
+        </div>
+
+        <!-- Status -->
+        <div class="status" id="status"></div>
+
+        <!-- Result -->
+        <div class="card" id="resultCard" style="display:none;">
+            <h2 style="color:#f39c12; margin-bottom:15px; text-align:center;">Flux Pro Result</h2>
+            <img id="resultImage" class="result-image" alt="AI Generated Sacred Geometry" />
+            <div class="prompt-display" id="promptDisplay"></div>
+        </div>
+    </div>
+
+    <script src="../js/hash-encoder.js"></script>
+    <script>
+        // Word counter
+        const intentionInput = document.getElementById('intentionInput');
+        const wordCountDisplay = document.getElementById('wordCount');
+        const generateBtn = document.getElementById('generateBtn');
+
+        intentionInput.addEventListener('input', function() {
+            const words = this.value.trim() ? this.value.trim().split(/\s+/) : [];
+            wordCountDisplay.textContent = words.length;
+            wordCountDisplay.style.color = words.length > 50 ? '#e74c3c' : '#f39c12';
+            generateBtn.disabled = words.length > 50;
+        });
+
+        // Color name lookup — converts hue degrees to a descriptive color name
+        // for use in the Flux Pro prompt so the AI understands the intended palette
+        function hueToColorName(hue) {
+            if (hue < 30)  return 'deep crimson red';
+            if (hue < 60)  return 'fiery orange';
+            if (hue < 90)  return 'golden yellow';
+            if (hue < 150) return 'emerald green';
+            if (hue < 210) return 'cyan turquoise';
+            if (hue < 270) return 'deep violet blue';
+            if (hue < 330) return 'royal purple';
+            return 'magenta rose';
+        }
+
+        // Converts our hash-derived parameters into a detailed Flux Pro prompt.
+        // The prompt encodes symmetry, color, complexity, and navigation metaphors
+        // so the AI understands the mathematical and contemplative intent.
+        function buildFluxPrompt(params) {
+            const colorName = hueToColorName(params.baseHue);
+            const symmetryWord = params.symmetry === 6 ? 'hexagonal' :
+                                 params.symmetry === 8 ? 'octagonal' :
+                                 params.symmetry === 12 ? 'dodecagonal' : 'sixteen-fold';
+            const complexityWord = params.complexity === 1 ? 'elegant and minimal' :
+                                   params.complexity === 2 ? 'intricate and detailed' :
+                                   'maximally complex and dense';
+            const ringsDesc = `${params.numRings} concentric rings`;
+
+            return `Sacred geometry mandala, ${symmetryWord} ${params.symmetry}-fold radial symmetry, ` +
+                   `${ringsDesc}, ${colorName} color palette with bioluminescent glow, ` +
+                   `golden ratio Fibonacci spiral point distribution, ${complexityWord} geometric pattern, ` +
+                   `geodesic great-circle connections between nodes, spherical coordinate mapping, ` +
+                   `${params.numPoints} primary constellation points, ` +
+                   `deep black void background, glowing nodes, flowing curved lines, ` +
+                   `hypnotic bilateral symmetry for meditation, EMDR-inspired visual anchor, ` +
+                   `nautical celestial navigation mathematics, consciousness visualization tool, ` +
+                   `ultra high detail, photorealistic sacred geometry, 4K digital art, ` +
+                   `dark mystical atmosphere, inner light radiating from center`;
+        }
+
+        // Main generation function
+        generateBtn.addEventListener('click', async function() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const intention = intentionInput.value.trim();
+
+            if (!apiKey) {
+                showStatus('Please enter your fal.ai API key.', 'error');
+                return;
+            }
+            if (!intention) {
+                showStatus('Please enter an intention.', 'error');
+                return;
+            }
+
+            generateBtn.disabled = true;
+            showStatus('Step 1/3: Generating cryptographic hash from intention...', 'loading');
+
+            try {
+                // Step 1: Generate hash and extract parameters
+                const hash = await generateHash(intention);
+                const hashNumbers = hexToNumbers(hash);
+
+                const params = {
+                    hash,
+                    numPoints:     8  + (hashNumbers[0] % 8),
+                    numRings:      3  + (hashNumbers[1] % 5),
+                    symmetry:      [6, 8, 12, 16][hashNumbers[2] % 4],
+                    baseHue:       hashNumbers[3] % 360,
+                    complexity:    1  + (hashNumbers[4] % 3),
+                    pulseAmplitude: (0.05 + (hashNumbers[10] / 255) * 0.15).toFixed(3)
+                };
+
+                // Display parameters
+                document.getElementById('paramsDisplay').style.display = 'block';
+                document.getElementById('hashDisplay').textContent = hash.substring(0, 16) + '...';
+                document.getElementById('symDisplay').textContent = params.symmetry;
+                document.getElementById('ringsDisplay').textContent = params.numRings;
+                document.getElementById('hueDisplay').textContent = params.baseHue;
+                document.getElementById('complexityDisplay').textContent = params.complexity;
+                document.getElementById('pulseDisplay').textContent = params.pulseAmplitude;
+                document.getElementById('pointsDisplay').textContent = params.numPoints;
+
+                // Step 2: Build prompt
+                showStatus('Step 2/3: Building sacred geometry prompt from hash parameters...', 'loading');
+                const prompt = buildFluxPrompt(params);
+
+                // Step 3: Call fal.ai Flux Pro
+                showStatus('Step 3/3: Sending to Flux Pro... this may take 20-40 seconds...', 'loading');
+
+                const response = await fetch('https://fal.run/fal-ai/flux-pro', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Key ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        image_size: 'square_hd',
+                        num_inference_steps: 28,
+                        guidance_scale: 3.5,
+                        num_images: 1,
+                        safety_tolerance: '2'
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || response.statusText);
+                }
+
+                const result = await response.json();
+                const imageUrl = result.images[0].url;
+
+                // Display result
+                document.getElementById('status').style.display = 'none';
+                document.getElementById('resultCard').style.display = 'block';
+
+                const img = document.getElementById('resultImage');
+                img.src = imageUrl;
+                img.style.display = 'block';
+
+                const promptDiv = document.getElementById('promptDisplay');
+                promptDiv.textContent = 'PROMPT SENT TO FLUX PRO: ' + prompt;
+                promptDiv.style.display = 'block';
+
+            } catch (err) {
+                showStatus('Error: ' + err.message, 'error');
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+        }
+    </script>
+</body>
+</html>
