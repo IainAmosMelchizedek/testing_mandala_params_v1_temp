@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intention Mandala - Geometric Visualization</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Intention Mandala</h1>
+            <p class="tagline">Transform Your Intention Into Geometric Patterns</p>
+            <p class="tagline-sub">A consciousness visualization tool</p>
+        </header>
+
+        <main>
+            <!-- Input Section -->
+            <section class="input-section">
+                <h2>Enter Your Intention</h2>
+                <p class="instruction">Intention = Purpose + Attention. What do you intend to do, and why? Think it through before you type it.</p>
+                <textarea id="intentionInput" rows="4" placeholder="Type your intention here..."></textarea>
+                <button class="primary-btn" id="analyzeBtn">Analyze Intention</button>
+            </section>
+
+            <!-- Analysis Feedback Section -->
+            <section class="analysis-section" id="analysisSection" style="display: none;">
+                <h2>Consciousness Analysis</h2>
+                <div id="feedbackMessage" class="feedback-message"></div>
+                
+                <!-- Reframed Intention (for harmful content) -->
+                <div id="reframedSection" class="reframed-intention" style="display: none;">
+                    <h3>Reframed Intention</h3>
+                    <p class="reframed-text" id="reframedText"></p>
+                    <button class="primary-btn" id="acceptReframeBtn">Accept Reframed Intention</button>
+                    <button class="secondary-btn" id="keepOriginalBtn" style="display: none;">Keep Original (I Understand)</button>
+                </div>
+
+                <!-- Direct Generate (for conscious content) -->
+                <div id="directGenerateSection" style="display: none;">
+                    <button class="primary-btn" id="generateDirectBtn">Generate Mandala</button>
+                </div>
+            </section>
+
+            <!-- Mandala Display Section -->
+            <section class="mandala-section" id="mandalaSection" style="display: none;">
+                <h2>Your Geometric Pattern</h2>
+                <p class="mandala-subtitle">A unique visualization generated from your intention</p>
+                <canvas id="mandalaCanvas" width="600" height="600"></canvas>
+                <div class="mandala-info">
+                    <p class="hash-display">Cryptographic Signature: <span id="hashDisplay"></span></p>
+                </div>
+                <div class="controls">
+                    <button class="secondary-btn" id="downloadPngBtn">Download PNG</button>
+                    <button class="secondary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">GIF Export (Coming Soon)</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p style="font-size: 1.2em; font-weight: bold; color: #f39c12; margin-bottom: 10px;">The Intention Keeper • v3.0 • For the Good of All Humanity</p>
+            <p style="color: #95a5a6;">Transcendence Detection • SHA-256 Mathematics • No Dogma • Pure Transformation</p>
+        </footer>
+    </div>
+
+    <script src="js/hash-encoder.js"></script>
+    <script src="js/intention-analyzer.js"></script>
+    <script src="js/mandala.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
