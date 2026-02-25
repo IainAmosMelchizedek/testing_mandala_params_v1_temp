@@ -94,7 +94,7 @@ class MandalaGenerator {
             const hue = (this.baseHue + ring * 30 + this.time * 10) % 360;
 
             for (let sym = 0; sym < this.symmetry; sym++) {
-                const angle = (Math.PI * 2 * sym) / this.symmetry;
+                const angle = -(Math.PI * 2 * sym) / this.symmetry;
                 this.ctx.save();
                 this.ctx.translate(this.centerX, this.centerY);
                 this.ctx.rotate(angle);
