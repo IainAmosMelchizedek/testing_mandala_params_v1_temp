@@ -1,91 +1,114 @@
-* { 
-    margin: 0; 
-    padding: 0; 
-    box-sizing: border-box; 
+/* =============================================================
+   styles.css - Intention Mandala Application
+   Purpose: Full-page dark theme layout, mobile-first responsive
+   Assumes: Single-page app with canvas-based mandala display
+   ============================================================= */
+
+/* Reset all default browser spacing and use border-box sizing
+   so padding never causes unexpected overflow */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-body { 
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); 
-    color: #e0e0e0; 
-    min-height: 100vh; 
-    padding: 20px; 
+/* Dark cosmic background gradient fills the full viewport.
+   Padding gives breathing room on small screens. */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 15px;
 }
 
-.container { 
-    max-width: 1200px; 
-    margin: 0 auto; 
+/* Centered content column — max width prevents over-stretching on wide screens */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
 }
 
-header { 
-    text-align: center; 
-    margin-bottom: 40px; 
-    padding: 30px 0; 
+/* Header centers the title and tagline with vertical breathing room */
+header {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px 0;
 }
 
-h1 { 
-    font-size: 3em; 
-    color: #f39c12; 
-    text-shadow: 0 0 20px rgba(243, 156, 18, 0.5); 
-    margin-bottom: 10px; 
+/* Gold glow on the main title — color chosen to evoke warmth and consciousness */
+h1 {
+    font-size: 2.5em;
+    color: #f39c12;
+    text-shadow: 0 0 20px rgba(243, 156, 18, 0.5);
+    margin-bottom: 10px;
 }
 
-.tagline { 
-    color: #95a5a6; 
-    font-style: italic; 
+/* Subtle muted taglines so they don't compete with h1 */
+.tagline {
+    color: #95a5a6;
+    font-style: italic;
 }
 
-.tagline-sub { 
-    color: #95a5a6; 
-    font-size: 0.85em; 
-    margin-top: 5px; 
+.tagline-sub {
+    color: #95a5a6;
+    font-size: 0.85em;
+    margin-top: 5px;
 }
 
-main { 
-    display: grid; 
-    gap: 30px; 
+/* Stacked single-column layout for all screen sizes */
+main {
+    display: grid;
+    gap: 25px;
 }
 
-section { 
-    background: rgba(255, 255, 255, 0.05); 
-    border: 1px solid rgba(243, 156, 18, 0.3); 
-    border-radius: 10px; 
-    padding: 25px; 
-    backdrop-filter: blur(10px); 
+/* Frosted glass card style for each section.
+   backdrop-filter adds depth on supported browsers. */
+section {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
 }
 
-h2, h3 { 
-    color: #f39c12; 
-    margin-bottom: 15px; 
+/* Gold headings consistent across all cards */
+h2, h3 {
+    color: #f39c12;
+    margin-bottom: 15px;
     text-align: center;
 }
 
-.instruction { 
-    color: #95a5a6; 
-    font-size: 0.9em; 
-    font-style: italic; 
-    margin-bottom: 10px; 
+/* Instructional text is de-emphasized with smaller italic style */
+.instruction {
+    color: #95a5a6;
+    font-size: 0.9em;
+    font-style: italic;
+    margin-bottom: 10px;
     text-align: center;
 }
 
-.input-section textarea { 
-    width: 100%; 
-    padding: 15px; 
-    background: rgba(0, 0, 0, 0.3); 
-    border: 2px solid rgba(243, 156, 18, 0.5); 
-    border-radius: 8px; 
-    color: #e0e0e0; 
-    font-size: 1.1em; 
-    resize: vertical; 
-    font-family: inherit; 
+/* Full-width textarea with gold border focus state.
+   resize:vertical lets users expand vertically only. */
+.input-section textarea {
+    width: 100%;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(243, 156, 18, 0.5);
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 1em;
+    resize: vertical;
+    font-family: inherit;
 }
 
-.input-section textarea:focus { 
-    outline: none; 
-    border-color: #f39c12; 
-    box-shadow: 0 0 15px rgba(243, 156, 18, 0.3); 
+.input-section textarea:focus {
+    outline: none;
+    border-color: #f39c12;
+    box-shadow: 0 0 15px rgba(243, 156, 18, 0.3);
 }
 
+/* Word counter sits flush right below textarea.
+   Color changes to red when limit exceeded (handled in app.js). */
 .word-counter {
     text-align: right;
     font-size: 0.9em;
@@ -99,75 +122,82 @@ h2, h3 {
     color: #f39c12;
 }
 
-.primary-btn { 
-    width: 100%; 
-    padding: 15px; 
-    margin-top: 15px; 
-    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%); 
-    border: none; 
-    border-radius: 8px; 
-    color: white; 
-    font-size: 1.1em; 
-    font-weight: bold; 
-    cursor: pointer; 
-    transition: all 0.3s ease; 
+/* Primary CTA button — full width, gold gradient, lifts on hover */
+.primary-btn {
+    width: 100%;
+    padding: 14px;
+    margin-top: 15px;
+    background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
-.primary-btn:hover { 
-    transform: translateY(-2px); 
-    box-shadow: 0 5px 20px rgba(243, 156, 18, 0.4); 
+.primary-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(243, 156, 18, 0.4);
 }
 
-.primary-btn:active { 
-    transform: translateY(0); 
+.primary-btn:active {
+    transform: translateY(0);
 }
 
+/* Disabled state prevents interaction and signals unavailability */
 .primary-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
 }
 
-.secondary-btn { 
-    padding: 12px 25px; 
+/* Secondary button — outlined gold style, less prominent than primary */
+.secondary-btn {
+    padding: 12px 20px;
     margin-top: 10px;
-    background: rgba(243, 156, 18, 0.2); 
-    border: 2px solid rgba(243, 156, 18, 0.5); 
-    border-radius: 8px; 
-    color: #f39c12; 
-    font-size: 1em; 
-    cursor: pointer; 
-    transition: all 0.3s ease; 
+    background: rgba(243, 156, 18, 0.2);
+    border: 2px solid rgba(243, 156, 18, 0.5);
+    border-radius: 8px;
+    color: #f39c12;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.3s ease;
 }
 
-.secondary-btn:hover:not(:disabled) { 
-    background: rgba(243, 156, 18, 0.3); 
-    border-color: #f39c12; 
+.secondary-btn:hover:not(:disabled) {
+    background: rgba(243, 156, 18, 0.3);
+    border-color: #f39c12;
 }
 
-.secondary-btn:disabled { 
-    opacity: 0.5; 
-    cursor: not-allowed; 
+.secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
-.analysis-section { 
-    border: 2px solid rgba(243, 156, 18, 0.5); 
+/* Analysis section gets a stronger border to signal it's a response area */
+.analysis-section {
+    border: 2px solid rgba(243, 156, 18, 0.5);
 }
 
-.feedback-message { 
-    padding: 20px; 
-    border-radius: 8px; 
-    line-height: 1.8; 
-    margin-bottom: 20px; 
+/* Feedback message box — color class applied dynamically by app.js */
+.feedback-message {
+    padding: 20px;
+    border-radius: 8px;
+    line-height: 1.8;
+    margin-bottom: 20px;
     text-align: left;
 }
 
-.feedback-conscious { 
-    background: rgba(46, 204, 113, 0.15); 
-    border: 2px solid rgba(46, 204, 113, 0.5); 
-    color: #2ecc71; 
+/* Green — intention is conscious and constructive */
+.feedback-conscious {
+    background: rgba(46, 204, 113, 0.15);
+    border: 2px solid rgba(46, 204, 113, 0.5);
+    color: #2ecc71;
 }
 
+/* Red — intention flagged as harmful, hard block */
 .feedback-harmful {
     background: rgba(139, 0, 0, 0.2);
     border: 3px solid rgba(220, 20, 60, 0.8);
@@ -175,109 +205,123 @@ h2, h3 {
     font-weight: bold;
 }
 
+/* Yellow — neutral or ambiguous intention, soft warning */
 .feedback-warning {
     background: rgba(255, 193, 7, 0.15);
     border: 2px solid rgba(255, 193, 7, 0.6);
     color: #ffc107;
 }
 
+/* Purple — transcendent intention detected */
 .feedback-transcendent {
     background: rgba(138, 43, 226, 0.15);
     border: 2px solid rgba(138, 43, 226, 0.6);
     color: #ba55d3;
 }
 
-.reframed-intention { 
-    background: rgba(155, 89, 182, 0.15); 
-    border: 2px solid rgba(155, 89, 182, 0.5); 
-    padding: 20px; 
-    border-radius: 8px; 
-    margin-top: 20px; 
+/* Reframe suggestion box — purple tones to distinguish from main feedback */
+.reframed-intention {
+    background: rgba(155, 89, 182, 0.15);
+    border: 2px solid rgba(155, 89, 182, 0.5);
+    padding: 20px;
+    border-radius: 8px;
+    margin-top: 20px;
 }
 
-.reframed-text { 
-    color: #9b59b6; 
-    font-size: 1.1em; 
-    font-weight: bold; 
-    margin: 15px 0; 
-    line-height: 1.6; 
+.reframed-text {
+    color: #9b59b6;
+    font-size: 1em;
+    font-weight: bold;
+    margin: 15px 0;
+    line-height: 1.6;
     text-align: center;
 }
 
-.mandala-section { 
-    text-align: center; 
-}
-
-.mandala-subtitle { 
-    color: #95a5a6; 
-    font-size: 0.9em; 
-    margin-bottom: 15px; 
-    font-style: italic; 
+/* Mandala section centers the canvas and its controls */
+.mandala-section {
     text-align: center;
 }
 
-#mandalaCanvas { 
-    display: block; 
-    margin: 20px auto; 
+.mandala-subtitle {
+    color: #95a5a6;
+    font-size: 0.9em;
+    margin-bottom: 15px;
+    font-style: italic;
+}
+
+/* Canvas scales down on small screens via max-width:100%.
+   Height auto preserves aspect ratio.
+   Purple glow border matches the mandala's color palette. */
+#mandalaCanvas {
+    display: block;
+    margin: 20px auto;
     background: rgba(0, 0, 0, 0.8);
-    border: 2px solid rgba(155, 89, 182, 0.5); 
-    border-radius: 8px; 
-    max-width: 100%; 
-    height: auto; 
-    box-shadow: 0 0 30px rgba(155, 89, 182, 0.3); 
+    border: 2px solid rgba(155, 89, 182, 0.5);
+    border-radius: 8px;
+    max-width: 100%;
+    height: auto;
+    box-shadow: 0 0 30px rgba(155, 89, 182, 0.3);
 }
 
-.mandala-info { 
-    margin-top: 15px; 
+/* Hash display below canvas — monospace font for cryptographic text */
+.mandala-info {
+    margin-top: 15px;
     text-align: center;
 }
 
-.hash-display { 
-    font-family: monospace; 
-    color: #95a5a6; 
-    font-size: 0.85em; 
+.hash-display {
+    font-family: monospace;
+    color: #95a5a6;
+    font-size: 0.8em;
     word-break: break-all;
-    text-align: center;
 }
 
+/* Download and export buttons sit side by side, wrap on small screens */
 .controls {
     display: flex;
+    flex-wrap: wrap;
     gap: 15px;
     justify-content: center;
     margin-top: 20px;
 }
 
-.gif-status {
-    margin-top: 15px;
-    padding: 10px;
-    background: rgba(243, 156, 18, 0.1);
-    border-radius: 5px;
-    color: #f39c12;
+/* Footer de-emphasized with small muted text */
+footer {
+    text-align: center;
+    margin-top: 40px;
+    padding: 20px;
+    color: #7f8c8d;
     font-size: 0.9em;
-    text-align: center;
 }
 
-footer { 
-    text-align: center; 
-    margin-top: 40px; 
-    padding: 20px; 
-    color: #7f8c8d; 
-    font-size: 0.9em; 
-}
-
-.footer-note { 
-    color: #7f8c8d; 
-    font-size: 0.85em; 
-    margin-top: 10px; 
-    text-align: center;
-}
-
-@media (max-width: 768px) { 
-    h1 { 
-        font-size: 2em; 
+/* =============================================================
+   MOBILE RESPONSIVE BREAKPOINTS
+   Adjusts font sizes and layout for screens under 600px
+   ============================================================= */
+@media (max-width: 600px) {
+    body {
+        padding: 10px;
     }
-    
+
+    h1 {
+        font-size: 1.8em;
+    }
+
+    h2 {
+        font-size: 1.2em;
+    }
+
+    /* Stack buttons vertically on very small screens */
     .controls {
         flex-direction: column;
+        align-items: center;
+    }
+
+    .secondary-btn {
+        width: 100%;
+    }
+
+    section {
+        padding: 15px;
     }
 }
