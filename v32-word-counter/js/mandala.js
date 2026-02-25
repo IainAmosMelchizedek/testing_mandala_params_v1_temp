@@ -2,6 +2,7 @@
 // Converts a SHA-256 hash into a deterministic, animated geometric mandala.
 // Every visual property — color, complexity, breathing speed, rotation — is seeded
 // from the hash so the same intention always produces the same mandala.
+// Rotation is counterclockwise, achieved by decrementing the angle over time.
 
 class MandalaGenerator {
     constructor(canvas) {
@@ -19,17 +20,21 @@ class MandalaGenerator {
         this.intentionText = '';
         this.showHash = true;
 
-        // Breathing parameters are set in generate() from hash bytes.
-        // Defaults here are overwritten before any animation runs.
+        // Breathing parameters are overwritten in generate() from hash bytes.
+        // Defaults here prevent errors if drawMandala is somehow called before generate().
         this.pulseAmplitude = 0.10;
         this.pulseSpeed = 0.02;
+
+        // Track total rotation angle separately so we can decrement it for counterclockwise.
+        // Using a dedicated variable avoids sign confusion with this.time.
+        this.rotationAngle = 0;
 
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
     }
 
     // Scales the canvas to fit the screen without horizontal overflow.
-    // Square canvas keeps the mandala's circular symmetry intact on all devices.
+    // Square canvas preserves the mandala's circular symmetry on all devices.
     resizeCanvas() {
         const maxSize = Math.min(window.innerWidth - 40, 600);
         this.canvas.width = maxSize;
@@ -39,26 +44,28 @@ class MandalaGenerator {
     }
 
     // Hashes the intention and extracts all visual parameters from specific byte positions.
-    // Bytes 0–4 control structure; bytes 10–11 control breathing behavior.
-    // Using named byte positions (not sequential) reduces correlation between parameters.
+    // Using non-sequential byte positions reduces correlation between visual parameters.
     async generate(intentionText) {
         this.intentionText = intentionText;
         const hash = await generateHash(intentionText);
         this.hashNumbers = hexToNumbers(hash);
         this.fullHash = hash;
 
-        // Structural parameters — determine the shape and complexity of the mandala
+        // Structural parameters — determine shape and complexity of the mandala
         const numPoints   = 8 + (this.hashNumbers[0] % 8);
         this.numRings     = 3 + (this.hashNumbers[1] % 5);
         this.symmetry     = [6, 8, 12, 16][this.hashNumbers[2] % 4];
         this.baseHue      = this.hashNumbers[3] % 360;
         this.complexity   = 1 + (this.hashNumbers[4] % 3);
 
-        // Breathing parameters — each intention breathes at its own rhythm.
-        // Amplitude range 0.05–0.20 keeps the pulse subtle but perceptible.
-        // Speed range 0.015–0.045 prevents the animation from feeling mechanical.
+        // Breathing parameters — each intention breathes at its own unique rhythm
+        // Amplitude range 0.05–0.20 keeps pulse subtle but perceptible
+        // Speed range 0.015–0.045 prevents animation from feeling mechanical
         this.pulseAmplitude = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
         this.pulseSpeed     = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
+
+        // Reset rotation so each new mandala starts fresh
+        this.rotationAngle = 0;
 
         // Generate geometry points using the evolved spherical coordinate system
         this.points = [];
@@ -69,24 +76,24 @@ class MandalaGenerator {
         return hash;
     }
 
-    // Renders one frame. Called on every animation tick with current pulse and rotation values.
+    // Renders one frame.
     // pulse: scale multiplier that breathes the mandala in and out
-    // rotation: cumulative angle in radians — negative value drives counterclockwise movement
-    drawMandala(pulse, rotation) {
-        // Near-opaque fill rather than full clear creates a subtle motion trail.
-        // Reducing opacity here would make trails longer and more visible.
+    // rotationAngle: current rotation in radians — decremented each frame for counterclockwise
+    drawMandala(pulse) {
+        // Near-opaque fill creates a subtle motion trail as frames stack
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         const scale = Math.min(this.canvas.width, this.canvas.height) / 3;
 
-        // Rotate the entire mandala around its center point
+        // Apply counterclockwise rotation around canvas center.
+        // Translating to center before rotating ensures rotation pivots correctly.
         this.ctx.save();
         this.ctx.translate(this.centerX, this.centerY);
-        this.ctx.rotate(rotation);
+        this.ctx.rotate(this.rotationAngle); // rotationAngle is always negative = counterclockwise
         this.ctx.translate(-this.centerX, -this.centerY);
 
-        // Outer rings drawn first so inner rings render on top
+        // Draw rings from back to front so inner rings render on top of outer rings
         for (let ring = this.numRings - 1; ring >= 0; ring--) {
             const ringRadius = (ring + 1) / this.numRings;
             const alpha = 0.3 + (ring / this.numRings) * 0.5;
@@ -94,6 +101,8 @@ class MandalaGenerator {
             const hue = (this.baseHue + ring * 30 + this.time * 10) % 360;
 
             for (let sym = 0; sym < this.symmetry; sym++) {
+                // Positive angle here distributes segments evenly around the circle.
+                // The counterclockwise effect comes from the global rotation above, not here.
                 const angle = (Math.PI * 2 * sym) / this.symmetry;
                 this.ctx.save();
                 this.ctx.translate(this.centerX, this.centerY);
@@ -116,9 +125,8 @@ class MandalaGenerator {
                     this.ctx.shadowColor = `hsla(${hue}, 80%, 70%, ${alpha})`;
                     this.ctx.fill();
 
-                    // Connect points with quadratic bezier curves instead of straight lines.
-                    // The control point is offset toward the canvas center, creating an inward
-                    // arc that mimics the curvature of great circles on a sphere.
+                    // Quadratic bezier curves between points approximate great-circle arcs.
+                    // Control point pulled toward center creates natural inward curvature.
                     if (i > 0) {
                         const prev = this.points[i - 1];
                         const prevCart = sphericalToCartesian(
@@ -127,7 +135,6 @@ class MandalaGenerator {
                             0, 0, scale
                         );
 
-                        // Control point pulls the curve toward center — curvature scales with ring depth
                         const cpX = (cart.x + prevCart.x) / 2 * (0.85 - ring * 0.03);
                         const cpY = (cart.y + prevCart.y) / 2 * (0.85 - ring * 0.03);
 
@@ -156,7 +163,7 @@ class MandalaGenerator {
         this.ctx.shadowBlur = 0;
 
         // --- TOP RIGHT: Cryptographic signature ---
-        // Identifies the mandala's hash without interfering with the central artwork
+        // Placed in corner to identify the mandala without overlapping the artwork
         if (this.showHash && this.fullHash) {
             this.ctx.save();
             const fontSize = Math.max(8, Math.floor(this.canvas.width / 60));
@@ -172,9 +179,9 @@ class MandalaGenerator {
         }
 
         // --- BOTTOM LEFT: User's intention text ---
-        // Rendered last so it always sits on top of the animation.
+        // Rendered last so it always appears on top of the animation.
         // Word-wrapped to stay within canvas bounds.
-        // 50-word maximum is enforced upstream in app.js before this is ever called.
+        // 50-word maximum is enforced upstream in app.js before this is called.
         if (this.intentionText) {
             this.ctx.save();
             const fontSize = Math.max(9, Math.floor(this.canvas.width / 55));
@@ -186,7 +193,6 @@ class MandalaGenerator {
             const padding = 10;
             const maxChars = Math.floor((this.canvas.width - padding * 2) / (fontSize * 0.6));
 
-            // Word-wrap intention into display lines
             const words = this.intentionText.split(' ');
             let lines = [];
             let currentLine = '';
@@ -201,7 +207,6 @@ class MandalaGenerator {
             }
             if (currentLine) lines.push(currentLine);
 
-            // Anchor text block to bottom left — label first, then wrapped lines
             const totalLines = lines.length + 1;
             let y = this.canvas.height - padding - (totalLines - 1) * lineH;
             this.ctx.fillText('INTENTION:', padding, y);
@@ -215,29 +220,30 @@ class MandalaGenerator {
         }
     }
 
-    // Drives the animation loop using hash-seeded breathing parameters.
-    // Negative rotation multiplier produces counterclockwise movement.
-    // Each intention has its own pulse rhythm because pulseAmplitude and pulseSpeed
-    // are derived from that intention's unique hash bytes.
+    // Animation loop driven by hash-seeded breathing parameters.
+    // rotationAngle decrements by a fixed step each frame — this is what guarantees
+    // counterclockwise movement independently of any other rotation in the draw calls.
     startBreathing() {
+        // Rotation step per frame — negative value is the sole driver of counterclockwise direction
+        const rotationStep = -0.008;
+
         const animate = () => {
             this.time += this.pulseSpeed;
 
-            // Sine wave oscillation — amplitude controls how much the mandala expands/contracts
+            // Decrement rotation angle each frame — guaranteed counterclockwise
+            this.rotationAngle += rotationStep;
+
+            // Sine wave pulse — amplitude and speed are unique to each intention's hash
             const pulse = 1.0 + Math.sin(this.time) * this.pulseAmplitude;
 
-            // Negative value = counterclockwise. Magnitude kept subtle so rotation
-            // feels meditative rather than mechanical.
-            const rotation = -(this.time * -2.0);
-
-            this.drawMandala(pulse, rotation);
+            this.drawMandala(pulse);
             this.animationFrame = requestAnimationFrame(animate);
         };
         animate();
     }
 
-    // Stops the animation loop. Always call this before generating a new mandala
-    // to prevent multiple loops from running simultaneously and causing visual glitches.
+    // Stops the animation loop. Must be called before generating a new mandala
+    // to prevent multiple animation loops running simultaneously.
     stopBreathing() {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
@@ -245,7 +251,7 @@ class MandalaGenerator {
         }
     }
 
-    // Returns raw pixel data for the current frame — used by PNG and GIF export functions
+    // Returns raw pixel data for the current frame — used by PNG and GIF export
     getCurrentFrame() {
         return this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
     }
