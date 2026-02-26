@@ -32,10 +32,7 @@
 
             <!-- ANALYSIS SECTION
                  Hidden until the user submits an intention.
-                 Displays consciousness analysis feedback and branching options:
-                 - Harmful content: forced reframe, no bypass
-                 - Neutral content: suggested reframe with override option
-                 - Conscious/transcendent: direct path to mandala generation -->
+                 Displays consciousness analysis feedback and branching options. -->
             <section class="analysis-section" id="analysisSection" style="display: none;">
                 <h2>Consciousness Analysis</h2>
                 <div id="feedbackMessage" class="feedback-message"></div>
@@ -45,7 +42,6 @@
                     <h3>Reframed Intention</h3>
                     <p class="reframed-text" id="reframedText"></p>
                     <button class="primary-btn" id="acceptReframeBtn">Accept Reframed Intention</button>
-                    <!-- keepOriginalBtn is only shown for neutral intentions, never for harmful -->
                     <button class="secondary-btn" id="keepOriginalBtn" style="display: none;">Keep Original (I Understand)</button>
                 </div>
 
@@ -57,26 +53,49 @@
 
             <!-- MANDALA SECTION
                  Hidden until mandala generation is triggered.
-                 Contains the canvas, cryptographic signature, audio controls, and download options.
-                 Canvas dimensions are set dynamically in mandala.js based on viewport size. -->
+                 Contains the canvas, timer, audio controls, and download options. -->
             <section class="mandala-section" id="mandalaSection" style="display: none;">
                 <h2>Your Geometric Pattern</h2>
                 <p class="mandala-subtitle">A unique visualization generated from your intention</p>
 
-                <canvas id="mandalaCanvas" width="600" height="600"></canvas>
+                <!-- Canvas wrapper allows fade-out without affecting surrounding layout -->
+                <div id="mandalaWrapper">
+                    <canvas id="mandalaCanvas" width="600" height="600"></canvas>
+                </div>
 
                 <div class="mandala-info">
                     <p class="hash-display">Cryptographic Signature: <span id="hashDisplay"></span></p>
                 </div>
 
-                <!-- Controls row: download and audio mute/unmute side by side -->
+                <!-- MEDITATION TIMER SECTION
+                     Shown after mandala generates. User selects duration then starts session.
+                     Timer counts down and triggers fade-out when complete. -->
+                <div class="timer-section" id="timerSection">
+                    <p class="timer-label">Select Meditation Duration</p>
+                    <div class="timer-presets">
+                        <button class="timer-btn" data-minutes="3">3 min</button>
+                        <button class="timer-btn" data-minutes="5">5 min</button>
+                        <button class="timer-btn" data-minutes="10">10 min</button>
+                        <button class="timer-btn" data-minutes="15">15 min</button>
+                    </div>
+                    <!-- Countdown display — hidden until timer starts -->
+                    <div class="countdown" id="countdown" style="display: none;">
+                        <span id="countdownDisplay">00:00</span>
+                        <button class="secondary-btn" id="cancelTimerBtn">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- End screen — shown when timer completes, overlays the faded mandala -->
+                <div class="session-complete" id="sessionComplete" style="display: none;">
+                    <p>🙏 Your meditation session is complete.</p>
+                    <p class="session-subtitle">Your intention has been set.</p>
+                    <button class="primary-btn" id="newSessionBtn">Begin New Session</button>
+                </div>
+
+                <!-- Controls row: download and audio mute/unmute -->
                 <div class="controls">
                     <button class="secondary-btn" id="downloadPngBtn">Download PNG</button>
-
-                    <!-- Mute button toggles the hash-seeded audio soundscape.
-                         Label updates dynamically in app.js to reflect current state. -->
                     <button class="secondary-btn" id="muteBtn">🔊 Mute Audio</button>
-
                     <button class="secondary-btn" disabled style="opacity: 0.6; cursor: not-allowed;">GIF Export (Coming Soon)</button>
                 </div>
             </section>
