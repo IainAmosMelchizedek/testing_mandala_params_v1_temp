@@ -36,12 +36,12 @@ class IntentionAudioEngine {
         // CLINICAL CONSTANT: 8 Hz alpha entrainment rate.
         // Slower than 10 Hz — more meditative, less mechanical feel.
         // One heartbeat every 125ms.
-        this.ENTRAINMENT_HZ = 8;
+        this.ENTRAINMENT_HZ = 7.83;
 
         // CLINICAL CONSTANT: 110 Hz tambura drone root frequency.
         // Ancient sacred chambers (Malta Hypogeum) were tuned to this frequency.
         // Modern studies link 110 Hz to prefrontal cortex activation and relaxation.
-        this.DRONE_ROOT_HZ = 110;
+        this.DRONE_ROOT_HZ = 528;
 
         // Hash-derived harmonic interval — set in extractAudioParams()
         // Controls the sitar overtone character unique to each intention
