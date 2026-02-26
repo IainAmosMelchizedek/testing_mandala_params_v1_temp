@@ -1,197 +1,246 @@
-// audio.js - Hash-seeded meditation audio engine for the Intention Keeper
-// Generates a unique soundscape for each intention using the Web Audio API.
-// Three layered audio sources are derived from hash bytes:
-//   1. Deep bass drone — the root frequency of the intention (40–80 Hz)
-//   2. Harmonic overtone — one octave above the bass for richness
-//   3. Rhythmic pulse — a drum-like beat synced to the mandala's breathing rate
-// All frequencies and rhythms are deterministic — same intention = same sound.
+// audio.js - Hash-seeded Indian meditation audio engine for the Intention Keeper
+// Generates a layered soundscape inspired by Indian classical meditation music.
+// Four audio layers, all derived deterministically from the intention's hash:
+//   1. Heartbeat bass drum — steady foundational pulse, the anchor of the soundscape
+//   2. Tambura drone — continuous low hum, like a tanpura string instrument
+//   3. Tabla-like rhythm — syncopated secondary beat layered over the heartbeat
+//   4. Sitar-like harmonic — bright plucked overtone on the beat
+// Volume set high (0.85) for full immersive experience.
 
 class IntentionAudioEngine {
     constructor() {
         // AudioContext is the Web Audio API entry point.
-        // Created lazily on first user interaction to comply with browser autoplay policies.
+        // Deferred until first user gesture to comply with browser autoplay policy.
         this.ctx = null;
 
-        // Master gain node controls overall volume.
-        // All audio sources route through this node so mute/unmute affects everything.
+        // Master gain controls overall volume — all layers route through this.
+        // Set to 0.85 for loud, immersive experience.
         this.masterGain = null;
 
-        // Individual audio nodes — stored so we can stop them cleanly
-        this.bassOscillator = null;
-        this.harmonicOscillator = null;
-        this.pulseInterval = null;
+        // Compressor prevents audio clipping when multiple loud layers play simultaneously
+        this.compressor = null;
 
-        // Tracks whether audio is currently muted by the user
+        // Continuous oscillator nodes — stopped and nulled on engine stop
+        this.droneOscillator = null;
+        this.droneOscillator2 = null;
+
+        // Interval handles for rhythmic layers — cleared on engine stop
+        this.heartbeatInterval = null;
+        this.tablaInterval = null;
+        this.sitarInterval = null;
+
         this.muted = false;
-
-        // Tracks whether the engine is actively running
         this.running = false;
 
-        // Hash-derived parameters — set in start() before audio nodes are created
-        this.bassFrequency = 55;      // Hz — default A1, overwritten from hash
-        this.pulseRate = 1.0;         // beats per second, overwritten from hash
-        this.harmonicRatio = 2.0;     // octave above bass by default
+        // Hash-derived parameters — set in extractAudioParams() before audio starts
+        this.rootFrequency = 60;      // Hz — bass root note of the intention
+        this.heartbeatRate = 1.0;     // beats per second
+        this.harmonicInterval = 1.5;  // musical interval ratio above root
     }
 
-    // Initializes the AudioContext on first call.
-    // Must be called from a user gesture (click) to satisfy browser autoplay policy.
-    // Subsequent calls are no-ops.
+    // Initializes AudioContext and master processing chain on first call.
+    // Compressor → MasterGain → Speakers prevents distortion at high volumes.
     initContext() {
         if (this.ctx) return;
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // Master gain routes to speakers — default volume 0.4 to avoid overwhelming the experience
+        // Compressor smooths out peaks when multiple layers hit simultaneously
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.threshold.setValueAtTime(-12, this.ctx.currentTime);
+        this.compressor.knee.setValueAtTime(6, this.ctx.currentTime);
+        this.compressor.ratio.setValueAtTime(3, this.ctx.currentTime);
+        this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
+        this.compressor.release.setValueAtTime(0.25, this.ctx.currentTime);
+
+        // Master gain at 0.85 — loud and immersive without clipping
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
+
+        this.compressor.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
     }
 
-    // Derives audio parameters from hash bytes.
-    // Uses bytes 12–19 — distinct from the visual parameter bytes (0–11)
-    // so audio and visual feel independent yet both tied to the same intention.
+    // Derives all audio parameters from hash bytes 12–20.
+    // Uses different bytes than the visual parameters (0–11) so audio
+    // feels independent yet is mathematically tied to the same intention.
     extractAudioParams(hashNumbers) {
-        // Bass frequency: maps byte 12 to 40–90 Hz (deep sub-bass to bass range)
-        // This range gives the grounded, meditative quality of Tibetan singing bowls
-        // and ceremonial drums without being too low for most speakers
-        this.bassFrequency = 40 + (hashNumbers[12] / 255) * 50;
+        // Root frequency: 50–90 Hz — deep meditative bass range
+        // Indian classical music is grounded in a root drone (Sa) — this is that note
+        this.rootFrequency = 50 + (hashNumbers[12] / 255) * 40;
 
-        // Pulse rate: maps byte 13 to 0.5–1.5 beats per second (30–90 BPM)
-        // Synced loosely to the mandala's breathing speed for visual-audio coherence
-        this.pulseRate = 0.5 + (hashNumbers[13] / 255) * 1.0;
+        // Heartbeat rate: 0.8–1.3 BPS (48–78 BPM) — resting to meditative heart rate range
+        this.heartbeatRate = 0.8 + (hashNumbers[13] / 255) * 0.5;
 
-        // Harmonic ratio: selects from musically consonant intervals
-        // 2.0 = octave, 1.5 = perfect fifth, 1.333 = perfect fourth, 1.25 = major third
-        // All sacred intervals found in world music traditions
-        const ratios = [2.0, 1.5, 1.333, 1.25];
-        this.harmonicRatio = ratios[hashNumbers[14] % 4];
+        // Harmonic interval: selects from Indian classical raga-compatible intervals
+        // 1.5 = perfect fifth (Pa), 1.333 = perfect fourth (Ma), 1.25 = major third (Ga)
+        const intervals = [1.5, 1.333, 1.25, 1.125];
+        this.harmonicInterval = intervals[hashNumbers[14] % 4];
     }
 
-    // Creates and starts the deep bass drone oscillator.
-    // Sine wave chosen for its pure, smooth, non-aggressive quality.
-    // Frequency is the hash-derived root note of the intention.
-    startBassDrone() {
-        this.bassOscillator = this.ctx.createOscillator();
-        this.bassOscillator.type = 'sine';
-        this.bassOscillator.frequency.setValueAtTime(this.bassFrequency, this.ctx.currentTime);
+    // Creates a short percussive burst — reused for both heartbeat and tabla layers.
+    // frequency: pitch of the drum hit
+    // gainPeak: how loud the hit is at its peak
+    // decayTime: how quickly it fades (shorter = snappier, longer = resonant)
+    createDrumHit(frequency, gainPeak, decayTime) {
+        const osc  = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
 
-        // Bass gain kept low so it is felt more than heard — physical resonance effect
-        const bassGain = this.ctx.createGain();
-        bassGain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        osc.type = 'sine';
+        // Pitch bend downward on attack — gives the thud quality of a tabla or bass drum
+        osc.frequency.setValueAtTime(frequency * 1.5, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(frequency, this.ctx.currentTime + 0.05);
 
-        this.bassOscillator.connect(bassGain);
-        bassGain.connect(this.masterGain);
-        this.bassOscillator.start();
+        // Sharp attack, exponential decay — the envelope that defines percussive sound
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(gainPeak, this.ctx.currentTime + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + decayTime);
+
+        osc.connect(gain);
+        gain.connect(this.compressor);
+
+        osc.start(this.ctx.currentTime);
+        osc.stop(this.ctx.currentTime + decayTime + 0.05);
     }
 
-    // Creates and starts the harmonic overtone oscillator.
-    // Plays a consonant interval above the bass for tonal richness.
-    // Triangle wave is softer than square wave, warmer than pure sine.
-    startHarmonic() {
-        this.harmonicOscillator = this.ctx.createOscillator();
-        this.harmonicOscillator.type = 'triangle';
-        this.harmonicOscillator.frequency.setValueAtTime(
-            this.bassFrequency * this.harmonicRatio,
-            this.ctx.currentTime
-        );
+    // Steady heartbeat bass drum — the foundational pulse of the soundscape.
+    // Deep, resonant hits at the hash-derived tempo.
+    // This layer never changes rhythm — it is the anchor everything else floats over.
+    startHeartbeat() {
+        const intervalMs = 1000 / this.heartbeatRate;
 
-        // Harmonic gain lower than bass — sits behind it in the mix
-        const harmonicGain = this.ctx.createGain();
-        harmonicGain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-
-        this.harmonicOscillator.connect(harmonicGain);
-        harmonicGain.connect(this.masterGain);
-        this.harmonicOscillator.start();
-    }
-
-    // Creates a rhythmic pulse using short burst oscillators triggered on an interval.
-    // Mimics a soft drum hit — a brief tone that decays quickly.
-    // The decay envelope (attack/release) is what gives it the percussive quality.
-    startRhythmicPulse() {
-        const intervalMs = 1000 / this.pulseRate;
-
-        this.pulseInterval = setInterval(() => {
+        this.heartbeatInterval = setInterval(() => {
             if (!this.ctx || this.muted) return;
-
-            // Each pulse is a new short-lived oscillator — more efficient than
-            // modulating a continuous one for percussive effects
-            const pulseOsc = this.ctx.createOscillator();
-            const pulseGain = this.ctx.createGain();
-
-            // Pulse frequency is 2.5x the bass — creates a mid-range drum-like thud
-            pulseOsc.type = 'sine';
-            pulseOsc.frequency.setValueAtTime(this.bassFrequency * 2.5, this.ctx.currentTime);
-
-            // Sharp attack, fast decay — the envelope that makes it sound like a drum hit
-            pulseGain.gain.setValueAtTime(0, this.ctx.currentTime);
-            pulseGain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.01);  // 10ms attack
-            pulseGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3); // 300ms decay
-
-            pulseOsc.connect(pulseGain);
-            pulseGain.connect(this.masterGain);
-
-            pulseOsc.start(this.ctx.currentTime);
-            pulseOsc.stop(this.ctx.currentTime + 0.35); // auto-cleanup after decay
-
+            // Deep bass hit — low frequency, high gain, long decay for resonance
+            this.createDrumHit(this.rootFrequency * 0.8, 0.9, 0.5);
         }, intervalMs);
     }
 
-    // Starts the full audio engine with parameters derived from the intention's hash.
-    // Called automatically when the mandala appears.
-    // hashNumbers: the 32-byte array from hexToNumbers() in hash-encoder.js
+    // Tabla-inspired syncopated rhythm layered over the heartbeat.
+    // Plays at 1.5x the heartbeat rate with a higher pitch and shorter decay —
+    // creates the characteristic off-beat pattern of Indian tabla playing.
+    startTablaRhythm() {
+        const intervalMs = (1000 / this.heartbeatRate) / 1.5;
+
+        // Offset start by half a heartbeat interval to land on the off-beat
+        setTimeout(() => {
+            this.tablaInterval = setInterval(() => {
+                if (!this.ctx || this.muted) return;
+                // Higher pitch, medium gain, short decay — tabla mid-tone (Na/Tin sound)
+                this.createDrumHit(this.rootFrequency * 2.2, 0.6, 0.2);
+            }, intervalMs);
+        }, (1000 / this.heartbeatRate) * 0.5);
+    }
+
+    // Tambura drone — continuous low hum that anchors the tonal center.
+    // Inspired by the tanpura, which provides the continuous harmonic backdrop
+    // in Indian classical music. Two slightly detuned oscillators create the
+    // characteristic beating/shimmer of a real stringed instrument.
+    startTambouraDrone() {
+        // Primary drone on the root frequency
+        this.droneOscillator = this.ctx.createOscillator();
+        this.droneOscillator.type = 'sawtooth'; // richer harmonic content than sine
+        this.droneOscillator.frequency.setValueAtTime(this.rootFrequency, this.ctx.currentTime);
+
+        const droneGain = this.ctx.createGain();
+        droneGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+
+        // Secondary drone slightly detuned (+3 cents) — creates natural shimmer/beating
+        this.droneOscillator2 = this.ctx.createOscillator();
+        this.droneOscillator2.type = 'sawtooth';
+        this.droneOscillator2.frequency.setValueAtTime(this.rootFrequency * 1.0017, this.ctx.currentTime);
+
+        const droneGain2 = this.ctx.createGain();
+        droneGain2.gain.setValueAtTime(0.2, this.ctx.currentTime);
+
+        this.droneOscillator.connect(droneGain);
+        droneGain.connect(this.compressor);
+
+        this.droneOscillator2.connect(droneGain2);
+        droneGain2.connect(this.compressor);
+
+        this.droneOscillator.start();
+        this.droneOscillator2.start();
+    }
+
+    // Sitar-inspired harmonic pluck on every other heartbeat.
+    // A short bright tone at the harmonic interval above the root,
+    // with a fast decay that mimics the plucked quality of a sitar string.
+    startSitarHarmonic() {
+        const intervalMs = (1000 / this.heartbeatRate) * 2; // every other beat
+
+        // Offset to land slightly after the heartbeat — traditional Indian phrasing
+        setTimeout(() => {
+            this.sitarInterval = setInterval(() => {
+                if (!this.ctx || this.muted) return;
+
+                const osc  = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                // Triangle wave approximates the warm but bright quality of a sitar
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(
+                    this.rootFrequency * this.harmonicInterval * 4, // 2 octaves up in harmonic range
+                    this.ctx.currentTime
+                );
+
+                // Fast attack, medium decay — plucked string envelope
+                gain.gain.setValueAtTime(0, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.4, this.ctx.currentTime + 0.005);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.4);
+
+                osc.connect(gain);
+                gain.connect(this.compressor);
+                osc.start(this.ctx.currentTime);
+                osc.stop(this.ctx.currentTime + 0.45);
+
+            }, intervalMs);
+        }, 80); // 80ms offset after heartbeat
+    }
+
+    // Starts the full layered soundscape.
+    // Called automatically when the mandala appears — the Generate button click
+    // satisfies the browser user-gesture requirement for AudioContext.
     start(hashNumbers) {
         if (this.running) this.stop();
 
         this.initContext();
         this.extractAudioParams(hashNumbers);
 
-        // Resume context in case browser suspended it (common on mobile)
-        if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        this.startBassDrone();
-        this.startHarmonic();
-        this.startRhythmicPulse();
+        this.startTambouraDrone();
+        this.startHeartbeat();
+        this.startTablaRhythm();
+        this.startSitarHarmonic();
 
         this.running = true;
-        this.muted = false;
+        this.muted   = false;
     }
 
-    // Stops all audio and cleans up nodes.
-    // Called when a new intention is submitted or the page is reset.
+    // Stops all audio layers and cleans up nodes.
+    // Called before starting a new intention's soundscape.
     stop() {
-        if (this.bassOscillator) {
-            try { this.bassOscillator.stop(); } catch(e) {}
-            this.bassOscillator = null;
-        }
-        if (this.harmonicOscillator) {
-            try { this.harmonicOscillator.stop(); } catch(e) {}
-            this.harmonicOscillator = null;
-        }
-        if (this.pulseInterval) {
-            clearInterval(this.pulseInterval);
-            this.pulseInterval = null;
-        }
+        if (this.droneOscillator)  { try { this.droneOscillator.stop();  } catch(e) {} this.droneOscillator  = null; }
+        if (this.droneOscillator2) { try { this.droneOscillator2.stop(); } catch(e) {} this.droneOscillator2 = null; }
+        if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
+        if (this.tablaInterval)     { clearInterval(this.tablaInterval);     this.tablaInterval     = null; }
+        if (this.sitarInterval)     { clearInterval(this.sitarInterval);     this.sitarInterval     = null; }
 
         this.running = false;
     }
 
-    // Toggles mute state by setting master gain to 0 or restoring it.
-    // Preferred over stop/start because it preserves the audio timing —
-    // when unmuted the rhythm resumes in sync rather than restarting from zero.
+    // Toggles mute by ramping master gain to 0 or back to 0.85.
+    // Smooth ramping prevents audible clicks on mute/unmute transitions.
     toggleMute() {
         if (!this.masterGain) return;
 
         this.muted = !this.muted;
 
         if (this.muted) {
-            // Smooth fade out over 0.1 seconds to avoid an audible click
             this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
         } else {
-            // Resume context if browser suspended it while muted
             if (this.ctx.state === 'suspended') this.ctx.resume();
-            // Smooth fade in
-            this.masterGain.gain.linearRampToValueAtTime(0.4, this.ctx.currentTime + 0.1);
+            this.masterGain.gain.linearRampToValueAtTime(0.85, this.ctx.currentTime + 0.1);
         }
 
         return this.muted;
