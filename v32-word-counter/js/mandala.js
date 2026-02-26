@@ -3,6 +3,7 @@
 // Counterclockwise rotation is achieved by directly offsetting point coordinates
 // using a decrementing angle — no ctx.rotate() is used for animation direction,
 // eliminating the optical illusion caused by canvas transform stacking.
+// Includes a spiral dissolve effect triggered at the end of a meditation session.
 
 class MandalaGenerator {
     constructor(canvas) {
@@ -52,16 +53,16 @@ class MandalaGenerator {
         this.fullHash = hash;
 
         // Structural parameters drawn from early bytes
-        const numPoints       = 8 + (this.hashNumbers[0] % 8);
-        this.numRings         = 3 + (this.hashNumbers[1] % 5);
-        this.symmetry         = [6, 8, 12, 16][this.hashNumbers[2] % 4];
-        this.baseHue          = this.hashNumbers[3] % 360;
-        this.complexity       = 1 + (this.hashNumbers[4] % 3);
+        const numPoints     = 8 + (this.hashNumbers[0] % 8);
+        this.numRings       = 3 + (this.hashNumbers[1] % 5);
+        this.symmetry       = [6, 8, 12, 16][this.hashNumbers[2] % 4];
+        this.baseHue        = this.hashNumbers[3] % 360;
+        this.complexity     = 1 + (this.hashNumbers[4] % 3);
 
         // Breathing rhythm seeded from bytes 10-11 so it is independent of structure params.
-        // Amplitude 0.05–0.20, speed 0.015–0.045 keeps animation meditative not mechanical.
-        this.pulseAmplitude   = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
-        this.pulseSpeed       = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
+        // Amplitude 0.05-0.20, speed 0.015-0.045 keeps animation meditative not mechanical.
+        this.pulseAmplitude = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
+        this.pulseSpeed     = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
 
         // Reset rotation so each new mandala starts from the same position
         this.rotationAngle = 0;
@@ -75,8 +76,8 @@ class MandalaGenerator {
     }
 
     // Rotates a 2D point counterclockwise around the canvas center by a given angle.
-    // This is the core of the counterclockwise fix — we rotate the coordinates themselves
-    // rather than the canvas context, so there is no transform stacking or optical illusion.
+    // Rotating coordinates directly rather than the canvas context guarantees
+    // counterclockwise direction without optical illusion from transform stacking.
     rotatePoint(x, y, angle) {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
@@ -89,10 +90,10 @@ class MandalaGenerator {
     }
 
     // Renders one frame of the mandala.
-    // pulse: scale multiplier for breathing effect
-    // All rotation is handled via rotatePoint() using this.rotationAngle
+    // pulse: scale multiplier for the breathing effect
+    // All rotation is applied via rotatePoint() using this.rotationAngle
     drawMandala(pulse) {
-        // Near-opaque fill creates subtle motion trail as frames stack
+        // Near-opaque fill creates a subtle motion trail as frames stack
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -106,7 +107,6 @@ class MandalaGenerator {
             const hue = (this.baseHue + ring * 30 + this.time * 10) % 360;
 
             for (let sym = 0; sym < this.symmetry; sym++) {
-                // Symmetry copies distributed evenly around the circle
                 const symAngle = (Math.PI * 2 * sym) / this.symmetry;
 
                 for (let i = 0; i < this.points.length; i++) {
@@ -126,7 +126,7 @@ class MandalaGenerator {
                         symAngle
                     );
 
-                    // Apply global counterclockwise rotation — negative angle = counterclockwise
+                    // Apply global counterclockwise rotation
                     const final = this.rotatePoint(
                         symRotated.x,
                         symRotated.y,
@@ -142,8 +142,8 @@ class MandalaGenerator {
                     this.ctx.shadowColor = `hsla(${hue}, 80%, 70%, ${alpha})`;
                     this.ctx.fill();
 
-                    // Connect consecutive points with bezier curves.
-                    // Control point pulled toward center approximates great-circle curvature.
+                    // Quadratic bezier curves between points approximate great-circle arcs.
+                    // Control point pulled toward center creates natural inward curvature.
                     if (i > 0) {
                         const prevPoint = this.points[i - 1];
                         const prevBase = sphericalToCartesian(
@@ -162,7 +162,6 @@ class MandalaGenerator {
                             this.rotationAngle
                         );
 
-                        // Midpoint pulled toward center for inward arc
                         const cpX = (final.x + prevFinal.x) / 2 * (0.85 - ring * 0.03) +
                                     this.centerX * (1 - (0.85 - ring * 0.03));
                         const cpY = (final.y + prevFinal.y) / 2 * (0.85 - ring * 0.03) +
@@ -204,7 +203,7 @@ class MandalaGenerator {
         }
 
         // --- BOTTOM LEFT: Intention text ---
-        // Rendered last to always appear on top of animation.
+        // Rendered last so it always appears on top of the animation.
         // 50-word limit enforced upstream in app.js.
         if (this.intentionText) {
             this.ctx.save();
@@ -244,18 +243,15 @@ class MandalaGenerator {
     }
 
     // Animation loop with hash-seeded breathing.
-    // rotationAngle decrements by a fixed negative step each frame.
-    // Because rotation is applied directly to point coordinates via rotatePoint(),
-    // the counterclockwise direction is mathematically guaranteed.
+    // rotationAngle decrements each frame — guaranteed counterclockwise movement.
     startBreathing() {
-        // Negative step = counterclockwise, applied to raw coordinates not canvas transform
         const rotationStep = -0.005;
 
         const animate = () => {
             this.time += this.pulseSpeed;
             this.rotationAngle += rotationStep;
 
-            // Organic breathing with a small harmonic overtone for natural feel
+            // Organic breathing with small harmonic overtone for natural feel
             const pulse = 1.0 +
                 Math.sin(this.time) * this.pulseAmplitude +
                 Math.sin(this.time * 1.6) * (this.pulseAmplitude * 0.2);
@@ -266,13 +262,53 @@ class MandalaGenerator {
         animate();
     }
 
-    // Stops animation. Call before generating a new mandala to prevent
-    // multiple loops running simultaneously.
+    // Stops the breathing animation loop.
+    // Always call before generating a new mandala to prevent multiple loops running.
     stopBreathing() {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
             this.animationFrame = null;
         }
+    }
+
+    // Spiral dissolve effect triggered at the end of a meditation session.
+    // Stops the breathing loop, then shrinks and rotates the mandala inward
+    // over the given duration, creating the feeling of dissolving into the void.
+    // duration: total dissolve time in milliseconds — should match audio fade duration.
+    spiralDissolve(duration) {
+        this.stopBreathing();
+
+        const steps    = 60;
+        const interval = duration / steps;
+        let   step     = 0;
+
+        const dissolve = setInterval(() => {
+            step++;
+
+            // Scale shrinks from 1.0 toward 0 as steps progress
+            const scale = Math.max(0.001, 1 - (step / steps));
+
+            // Rotation accelerates as mandala spirals inward — pulled into center feel
+            const extraRotation = step * 0.15;
+            this.rotationAngle -= extraRotation * 0.01;
+
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+            this.ctx.save();
+            this.ctx.translate(this.centerX, this.centerY);
+            this.ctx.scale(scale, scale);
+            this.ctx.translate(-this.centerX, -this.centerY);
+            this.drawMandala(scale);
+            this.ctx.restore();
+
+            // When dissolve completes, fill canvas with black — clean void state
+            if (step >= steps) {
+                clearInterval(dissolve);
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+        }, interval);
     }
 
     // Returns current frame pixel data for PNG/GIF export
