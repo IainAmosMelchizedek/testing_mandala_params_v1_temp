@@ -36,7 +36,7 @@ class IntentionAudioEngine {
         // SACRED CONSTANT: 852 Hz — Third Eye Chakra (Ajna) Solfeggio frequency.
         // Promotes spiritual insight and intuitive clarity — aligned with intention setting.
         // Kept fixed so the spiritual resonance is consistent across all intentions.
-        this.THIRD_EYE_HZ = 852;
+        this.THIRD_EYE_HZ = 53.25;
 
         // Hash-derived harmonic interval — set in extractAudioParams().
         // Varies per intention so each sitar tone is unique while staying consonant with 852 Hz.
