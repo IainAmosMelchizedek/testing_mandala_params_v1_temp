@@ -59,7 +59,7 @@ class IntentionAudioEngine {
 
         // Master gain at 0.75 — slightly lower than before since we only have two layers
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(0.75, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(1.5, this.ctx.currentTime);
 
         this.compressor.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
@@ -99,7 +99,7 @@ class IntentionAudioEngine {
 
             // Soft attack, medium decay — more like a felt pulse than a sharp drum hit
             gain.gain.setValueAtTime(0, this.ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.7, this.ctx.currentTime + 0.01);
+            gain.gain.linearRampToValueAtTime(1.5, this.ctx.currentTime + 0.01);
             gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
 
             osc.connect(gain);
@@ -137,7 +137,7 @@ class IntentionAudioEngine {
 
                 // Plucked string envelope: fast attack, slow decay
                 gain.gain.setValueAtTime(0, this.ctx.currentTime);
-                gain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.008);
+                gain.gain.linearRampToValueAtTime(1.5, this.ctx.currentTime + 0.008);
                 gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.8);
 
                 osc.connect(gain);
