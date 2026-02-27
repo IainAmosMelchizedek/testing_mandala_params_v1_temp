@@ -30,6 +30,17 @@
                 <button class="primary-btn" id="analyzeBtn">Analyze Intention</button>
             </section>
 
+            <!-- MY INTENTIONS SECTION
+                 Hidden until at least one intention has been saved to local storage.
+                 Shows all past intentions with date, time, and a delete button.
+                 Clicking an intention text regenerates that exact mandala instantly. -->
+            <section class="intentions-section" id="intentionsSection" style="display: none;">
+                <h2>My Intentions</h2>
+                <p class="instruction">Click any intention to regenerate its mandala.</p>
+                <div id="intentionsList"></div>
+                <button class="secondary-btn" id="clearAllBtn" style="margin-top: 15px;">Clear All Intentions</button>
+            </section>
+
             <!-- ANALYSIS SECTION
                  Hidden until the user submits an intention.
                  Displays consciousness analysis feedback and branching options. -->
@@ -58,7 +69,7 @@
                 <h2>Your Geometric Pattern</h2>
                 <p class="mandala-subtitle">A unique visualization generated from your intention</p>
 
-                <!-- Canvas wrapper allows fade-out without affecting surrounding layout -->
+                <!-- Canvas wrapper enables spiral dissolve without affecting surrounding layout -->
                 <div id="mandalaWrapper">
                     <canvas id="mandalaCanvas" width="600" height="600"></canvas>
                 </div>
@@ -68,8 +79,7 @@
                 </div>
 
                 <!-- MEDITATION TIMER SECTION
-                     Shown after mandala generates. User selects duration then starts session.
-                     Timer counts down and triggers fade-out when complete. -->
+                     Shown after mandala generates. User selects duration then starts session. -->
                 <div class="timer-section" id="timerSection">
                     <p class="timer-label">Select Meditation Duration</p>
                     <div class="timer-presets">
@@ -78,14 +88,13 @@
                         <button class="timer-btn" data-minutes="10">10 min</button>
                         <button class="timer-btn" data-minutes="15">15 min</button>
                     </div>
-                    <!-- Countdown display — hidden until timer starts -->
                     <div class="countdown" id="countdown" style="display: none;">
                         <span id="countdownDisplay">00:00</span>
                         <button class="secondary-btn" id="cancelTimerBtn">Cancel</button>
                     </div>
                 </div>
 
-                <!-- End screen — shown when timer completes, overlays the faded mandala -->
+                <!-- Session complete screen — shown after spiral dissolve finishes -->
                 <div class="session-complete" id="sessionComplete" style="display: none;">
                     <p>🙏 Your meditation session is complete.</p>
                     <p class="session-subtitle">Your intention has been set.</p>

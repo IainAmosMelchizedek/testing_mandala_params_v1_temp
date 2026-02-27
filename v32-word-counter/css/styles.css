@@ -455,3 +455,119 @@ footer {
     from { opacity: 0; }
     to   { opacity: 1; }
 }
+
+/* =============================================================
+   MY INTENTIONS SECTION STYLES
+   Purpose: Displays all saved intentions from local storage.
+   Each intention is a clickable card that regenerates its mandala.
+   Assumes: Section is hidden by default and shown by app.js when
+   at least one intention exists in local storage.
+   ============================================================= */
+
+/* Container section — same frosted glass card style as other sections */
+.intentions-section {
+    border: 1px solid rgba(243, 156, 18, 0.3);
+}
+
+/* Scrollable list container — prevents page from growing too long
+   when many intentions are stored */
+#intentionsList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+/* Custom scrollbar styling — matches dark theme */
+#intentionsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#intentionsList::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+#intentionsList::-webkit-scrollbar-thumb {
+    background: rgba(243, 156, 18, 0.4);
+    border-radius: 3px;
+}
+
+/* Individual intention card — clickable row with text on left, delete on right.
+   Hover state signals it is interactive without being distracting. */
+.intention-card {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 15px;
+    padding: 12px 15px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(243, 156, 18, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.intention-card:hover {
+    background: rgba(243, 156, 18, 0.1);
+    border-color: rgba(243, 156, 18, 0.5);
+    transform: translateX(3px);
+}
+
+/* Left side of the card — intention text and timestamp stacked vertically */
+.intention-card-content {
+    flex: 1;
+    text-align: left;
+}
+
+/* The intention text itself — gold on hover to reinforce clickability */
+.intention-card-text {
+    color: #e0e0e0;
+    font-size: 0.95em;
+    line-height: 1.5;
+    margin-bottom: 4px;
+    transition: color 0.2s ease;
+}
+
+.intention-card:hover .intention-card-text {
+    color: #f39c12;
+}
+
+/* Timestamp below the intention text — muted, small, secondary information */
+.intention-card-date {
+    color: #7f8c8d;
+    font-size: 0.75em;
+    font-family: monospace;
+}
+
+/* Delete button — subtle red, sits to the right of the intention text.
+   Sized small so it does not compete with the intention text for attention. */
+.intention-delete-btn {
+    background: none;
+    border: 1px solid rgba(231, 76, 60, 0.4);
+    border-radius: 5px;
+    color: rgba(231, 76, 60, 0.7);
+    font-size: 0.8em;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.intention-delete-btn:hover {
+    background: rgba(231, 76, 60, 0.15);
+    border-color: rgba(231, 76, 60, 0.8);
+    color: #e74c3c;
+}
+
+/* Empty state message — shown when all intentions have been deleted */
+.intentions-empty {
+    text-align: center;
+    color: #7f8c8d;
+    font-style: italic;
+    padding: 20px;
+    font-size: 0.9em;
+}

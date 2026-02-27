@@ -1,11 +1,11 @@
 // app.js - Application controller for the Intention Keeper
 // Wires together the mandala generator, audio engine, consciousness analyzer,
-// and meditation timer. Manages all UI state transitions.
+// meditation timer, and local intention storage.
 //
-// Timer flow:
-//   User selects duration → countdown starts → spiral dissolve triggers at zero →
-//   audio fades simultaneously → session complete screen appears →
-//   Begin New Session reloads the page for a completely clean state
+// Storage approach: Intentions are saved to localStorage as a JSON array.
+// Each entry contains the intention text, timestamp, and MERIDIAN-HASH.
+// No images are stored — the mandala regenerates deterministically from the text.
+// This Tier 1 storage will eventually sync to the Hetzner backend (Tier 2).
 
 let mandalaGen         = null;
 let audioEngine        = null;
@@ -13,9 +13,12 @@ let currentIntention   = '';
 let currentHash        = '';
 let currentHashNumbers = [];
 
-// Timer state — tracked here so cancel and reset work cleanly
+// Timer state
 let timerInterval = null;
 let timerSeconds  = 0;
+
+// localStorage key — namespaced to avoid conflicts with other apps on the same domain
+const STORAGE_KEY = 'intentionKeeper_intentions';
 
 document.addEventListener('DOMContentLoaded', function() {
     const canvas            = document.getElementById('mandalaCanvas');
@@ -30,13 +33,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const wordWarning       = document.getElementById('wordWarning');
     const cancelTimerBtn    = document.getElementById('cancelTimerBtn');
     const newSessionBtn     = document.getElementById('newSessionBtn');
+    const clearAllBtn       = document.getElementById('clearAllBtn');
 
     mandalaGen  = new MandalaGenerator(canvas);
     audioEngine = new IntentionAudioEngine();
 
+    // Load and display any previously saved intentions on page load
+    renderIntentionsList();
+
     // --- WORD COUNTER ---
-    // Updates on every keystroke. Disables Analyze if over 50 words.
-    // The 50-word limit keeps intentions focused and prevents hash parameter overflow.
     intentionInput.addEventListener('input', function() {
         const text      = intentionInput.value.trim();
         const wordCount = text ? text.split(/\s+/).length : 0;
@@ -53,7 +58,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- ANALYZE BUTTON ---
-    // Triggers consciousness analysis and reveals the analysis section.
     analyzeBtn.addEventListener('click', async function() {
         const intention = intentionInput.value.trim();
         if (!intention) { alert('Please enter an intention first.'); return; }
@@ -64,26 +68,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- ACCEPT REFRAME ---
-    // User accepts the AI-suggested reframe of a harmful or neutral intention.
     acceptReframeBtn.addEventListener('click', async function() {
         const reframedText = document.getElementById('reframedText').textContent;
         await generateMandala(reframedText);
     });
 
     // --- KEEP ORIGINAL ---
-    // Only available for neutral intentions — harmful content has no bypass.
     keepOriginalBtn.addEventListener('click', async function() {
         await generateMandala(currentIntention);
     });
 
     // --- DIRECT GENERATE ---
-    // Shown when intention passes analysis as conscious or transcendent.
     generateDirectBtn.addEventListener('click', async function() {
         await generateMandala(currentIntention);
     });
 
     // --- DOWNLOAD PNG ---
-    // Captures the current canvas frame as a timestamped PNG file.
     downloadPngBtn.addEventListener('click', function() {
         const link    = document.createElement('a');
         link.download = `intention-mandala-${Date.now()}.png`;
@@ -92,7 +92,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- MUTE / UNMUTE ---
-    // Toggles master gain with smooth ramping to prevent audible clicks.
     muteBtn.addEventListener('click', function() {
         if (!audioEngine) return;
         const isMuted       = audioEngine.toggleMute();
@@ -100,34 +99,144 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- TIMER PRESET BUTTONS ---
-    // Each button carries a data-minutes attribute set in the HTML.
-    // Clicking highlights the selected button and starts a fresh countdown.
     document.querySelectorAll('.timer-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.timer-btn').forEach(b => b.classList.remove('active'));
             this.classList.add('active');
-            const minutes = parseInt(this.dataset.minutes);
-            startTimer(minutes);
+            startTimer(parseInt(this.dataset.minutes));
         });
     });
 
     // --- CANCEL TIMER ---
-    // Returns UI to timer selection state without resetting the mandala.
     cancelTimerBtn.addEventListener('click', function() {
         cancelTimer();
     });
 
     // --- NEW SESSION ---
-    // Reloads the page for a completely clean state — audio, mandala, and timer all reset.
-    // Page reload is the most reliable way to ensure no audio or animation artifacts persist.
+    // Full page reload guarantees clean audio, animation, and timer state
     newSessionBtn.addEventListener('click', function() {
         window.location.reload();
     });
+
+    // --- CLEAR ALL INTENTIONS ---
+    // Confirms before wiping all saved intentions from localStorage
+    clearAllBtn.addEventListener('click', function() {
+        if (confirm('Are you sure you want to delete all saved intentions? This cannot be undone.')) {
+            localStorage.removeItem(STORAGE_KEY);
+            renderIntentionsList();
+        }
+    });
 });
+
+// ─────────────────────────────────────────────
+// INTENTION STORAGE FUNCTIONS
+// ─────────────────────────────────────────────
+
+// Saves a new intention entry to localStorage.
+// Each entry includes the text, MERIDIAN-HASH, and ISO timestamp.
+// Newer entries are prepended so the list shows most recent first.
+function saveIntention(intentionText, hash) {
+    const intentions = loadIntentions();
+
+    // Avoid storing duplicate consecutive intentions
+    if (intentions.length > 0 && intentions[0].text === intentionText) return;
+
+    intentions.unshift({
+        text:      intentionText,
+        hash:      hash,
+        timestamp: new Date().toISOString()
+    });
+
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(intentions));
+    } catch(e) {
+        // localStorage may be full or blocked — fail silently rather than breaking the app
+        console.warn('Could not save intention to localStorage:', e);
+    }
+
+    renderIntentionsList();
+}
+
+// Loads all saved intentions from localStorage.
+// Returns an empty array if nothing is stored or storage is unavailable.
+function loadIntentions() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch(e) {
+        return [];
+    }
+}
+
+// Deletes a single intention entry by its index in the stored array.
+// Re-renders the list after deletion.
+function deleteIntention(index) {
+    const intentions = loadIntentions();
+    intentions.splice(index, 1);
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(intentions));
+    } catch(e) {
+        console.warn('Could not update localStorage:', e);
+    }
+    renderIntentionsList();
+}
+
+// Renders the full intentions list into the DOM.
+// Shows the section if entries exist, hides it if empty.
+// Each card is clickable to regenerate that intention's mandala.
+function renderIntentionsList() {
+    const intentions      = loadIntentions();
+    const section         = document.getElementById('intentionsSection');
+    const list            = document.getElementById('intentionsList');
+
+    if (intentions.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    list.innerHTML = '';
+
+    intentions.forEach((entry, index) => {
+        const card = document.createElement('div');
+        card.className = 'intention-card';
+
+        // Format the stored ISO timestamp into a readable local date/time
+        const date = new Date(entry.timestamp);
+        const formatted = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {
+            hour: '2-digit', minute: '2-digit'
+        });
+
+        card.innerHTML = `
+            <div class="intention-card-content">
+                <div class="intention-card-text">${entry.text}</div>
+                <div class="intention-card-date">${formatted} &nbsp;·&nbsp; ${entry.hash.substring(0, 12)}...</div>
+            </div>
+            <button class="intention-delete-btn" data-index="${index}">Delete</button>
+        `;
+
+        // Clicking the card content regenerates the mandala for that intention
+        card.querySelector('.intention-card-content').addEventListener('click', async function() {
+            document.getElementById('intentionInput').value = entry.text;
+            await generateMandala(entry.text);
+        });
+
+        // Delete button removes only this entry without affecting others
+        card.querySelector('.intention-delete-btn').addEventListener('click', function(e) {
+            e.stopPropagation(); // prevent card click from firing
+            deleteIntention(index);
+        });
+
+        list.appendChild(card);
+    });
+}
+
+// ─────────────────────────────────────────────
+// CONSCIOUSNESS ANALYSIS
+// ─────────────────────────────────────────────
 
 // Analyzes the intention using the frontend consciousness analyzer stub.
 // In production this will be replaced by a fetch() call to the DeepSeek backend pipeline.
-// Routes UI to the appropriate state based on severity: unconscious, neutral, or conscious.
 async function analyzeIntention(intention) {
     currentIntention = intention;
 
@@ -141,23 +250,18 @@ async function analyzeIntention(intention) {
     feedbackDiv.innerHTML = analysis.feedback.replace(/\n/g, '<br>');
 
     if (analysis.severity === 'unconscious') {
-        // Hard block — harmful content, reframe is mandatory, no bypass
         feedbackDiv.className         = 'feedback-message feedback-harmful';
         reframedText.textContent      = IntentionAnalyzer.reframe(intention);
         reframedSection.style.display = 'block';
         keepOriginalBtn.style.display = 'none';
         directGenerateSection.style.display = 'none';
-
     } else if (analysis.severity === 'neutral') {
-        // Soft warning — reframe suggested but user may override
         feedbackDiv.className         = 'feedback-message feedback-warning';
         reframedText.textContent      = IntentionAnalyzer.reframe(intention);
         reframedSection.style.display = 'block';
         keepOriginalBtn.style.display = 'inline-block';
         directGenerateSection.style.display = 'none';
-
     } else {
-        // Conscious or transcendent — direct path to mandala generation
         feedbackDiv.className = analysis.transcendentCount > 0
             ? 'feedback-message feedback-transcendent'
             : 'feedback-message feedback-conscious';
@@ -166,8 +270,12 @@ async function analyzeIntention(intention) {
     }
 }
 
-// Generates the mandala, starts audio, and reveals the timer selection UI.
-// The Generate button click satisfies the browser autoplay policy for AudioContext.
+// ─────────────────────────────────────────────
+// MANDALA GENERATION
+// ─────────────────────────────────────────────
+
+// Generates the mandala, starts audio, saves intention to storage,
+// and reveals the timer selection UI.
 async function generateMandala(intentionText) {
     const mandalaSection  = document.getElementById('mandalaSection');
     const hashDisplay     = document.getElementById('hashDisplay');
@@ -177,7 +285,6 @@ async function generateMandala(intentionText) {
     const timerSection    = document.getElementById('timerSection');
     const countdown       = document.getElementById('countdown');
 
-    // Reset any previous session state before generating a new mandala
     mandalaWrapper.classList.remove('fading');
     mandalaWrapper.style.opacity  = '1';
     sessionComplete.style.display = 'none';
@@ -191,7 +298,6 @@ async function generateMandala(intentionText) {
 
     if (audioEngine) audioEngine.stop();
 
-    // Generate hash and extract all visual parameters
     const hash = await mandalaGen.generate(intentionText);
     currentHash        = hash;
     currentHashNumbers = mandalaGen.hashNumbers;
@@ -199,33 +305,35 @@ async function generateMandala(intentionText) {
     hashDisplay.textContent = hash.substring(0, 16) + '...';
     mandalaGen.startBreathing();
 
-    // Start audio using the same hash numbers that drive the visual —
-    // ensures audio and visual are mathematically tied to the same intention
+    // Save intention to local storage after successful mandala generation.
+    // Storage happens here rather than at analysis time so only mandalas
+    // that were actually generated (not just analyzed) are recorded.
+    saveIntention(intentionText, hash);
+
     if (audioEngine) {
         audioEngine.start(currentHashNumbers);
         muteBtn.textContent = '🔊 Mute Audio';
     }
 }
 
-// Starts the countdown timer for the selected number of minutes.
-// Hides preset buttons and shows the live countdown while running.
-function startTimer(minutes) {
-    cancelTimer(); // clear any existing timer before starting fresh
+// ─────────────────────────────────────────────
+// MEDITATION TIMER
+// ─────────────────────────────────────────────
 
+function startTimer(minutes) {
+    cancelTimer();
     timerSeconds = minutes * 60;
 
     const timerPresets = document.querySelector('.timer-presets');
     const timerLabel   = document.querySelector('.timer-label');
     const countdown    = document.getElementById('countdown');
 
-    // Hide preset buttons during meditation to reduce visual distraction
     timerPresets.style.display = 'none';
     timerLabel.style.display   = 'none';
     countdown.style.display    = 'flex';
 
     updateCountdownDisplay(timerSeconds);
 
-    // Tick every second — decrement and check for completion
     timerInterval = setInterval(() => {
         timerSeconds--;
         updateCountdownDisplay(timerSeconds);
@@ -237,15 +345,12 @@ function startTimer(minutes) {
     }, 1000);
 }
 
-// Formats seconds into MM:SS and updates the countdown display element
 function updateCountdownDisplay(seconds) {
     const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
     const secs = (seconds % 60).toString().padStart(2, '0');
     document.getElementById('countdownDisplay').textContent = `${mins}:${secs}`;
 }
 
-// Cancels a running timer and restores the preset button UI.
-// Called by the Cancel button and before starting any new timer.
 function cancelTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
@@ -264,21 +369,16 @@ function cancelTimer() {
     document.querySelectorAll('.timer-btn').forEach(b => b.classList.remove('active'));
 }
 
-// Called when the countdown reaches zero.
-// Triggers the spiral dissolve on the canvas and fades audio simultaneously.
-// Both the visual and audio dissolve over 8 seconds before the session
-// complete screen appears — creating a unified, ceremonial ending.
+// Called when countdown reaches zero.
+// Triggers spiral dissolve and synchronized audio fade over 8 seconds.
 function completeSession() {
     const timerSection    = document.getElementById('timerSection');
     const sessionComplete = document.getElementById('sessionComplete');
 
-    // Hide timer UI so only the dissolving mandala is visible
     timerSection.style.display = 'none';
 
-    // Trigger spiral dissolve on canvas over 8 seconds
     if (mandalaGen) mandalaGen.spiralDissolve(8000);
 
-    // Fade audio out over the same 8 seconds for a unified sensory ending
     if (audioEngine && audioEngine.masterGain && audioEngine.ctx) {
         audioEngine.masterGain.gain.linearRampToValueAtTime(
             0,
@@ -286,7 +386,6 @@ function completeSession() {
         );
     }
 
-    // After dissolve completes, stop audio and show session complete screen
     setTimeout(() => {
         if (audioEngine) audioEngine.stop();
         sessionComplete.style.display = 'block';
