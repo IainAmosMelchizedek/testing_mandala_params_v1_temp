@@ -3,7 +3,7 @@
 // meditation timer, local intention storage, and scroll wheel timer picker.
 //
 // Timer flow:
-//   User scrolls hours/minutes wheels → taps Begin Meditation →
+//   User scrolls hours/minutes/seconds wheels → taps Begin Meditation →
 //   countdown starts → spiral dissolve triggers at zero →
 //   audio fades simultaneously → session complete screen appears →
 //   Begin New Session reloads page for a completely clean state
@@ -21,9 +21,10 @@ let timerSeconds  = 0;
 // localStorage key — namespaced to avoid conflicts with other apps
 const STORAGE_KEY = 'intentionKeeper_intentions';
 
-// Wheel picker state — tracks the currently selected hour and minute values
+// Wheel picker state — tracks selected hours, minutes, and seconds
 let selectedHours   = 0;
-let selectedMinutes = 5; // default to 5 minutes so the wheel is never at zero on load
+let selectedMinutes = 5; // default to 5 minutes so wheel is never at zero on load
+let selectedSeconds = 0;
 
 document.addEventListener('DOMContentLoaded', function() {
     const canvas            = document.getElementById('mandalaCanvas');
@@ -31,7 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const acceptReframeBtn  = document.getElementById('acceptReframeBtn');
     const keepOriginalBtn   = document.getElementById('keepOriginalBtn');
     const generateDirectBtn = document.getElementById('generateDirectBtn');
-    const downloadPngBtn    = document.getElementById('downloadPngBtn');
     const muteBtn           = document.getElementById('muteBtn');
     const intentionInput    = document.getElementById('intentionInput');
     const wordCountDisplay  = document.getElementById('wordCount');
@@ -44,9 +44,10 @@ document.addEventListener('DOMContentLoaded', function() {
     mandalaGen  = new MandalaGenerator(canvas);
     audioEngine = new IntentionAudioEngine();
 
-    // Build wheel pickers and render saved intentions on page load
-    buildWheel('hoursWheel', 0, 2, selectedHours, (val) => { selectedHours = val; });
-    buildWheel('minutesWheel', 0, 59, selectedMinutes, (val) => { selectedMinutes = val; });
+    // Build all three wheel pickers and render saved intentions on page load
+    buildWheel('hoursWheel',   0,  2, selectedHours,   (val) => { selectedHours   = val; });
+    buildWheel('minutesWheel', 0, 59, selectedMinutes,  (val) => { selectedMinutes = val; });
+    buildWheel('secondsWheel', 0, 59, selectedSeconds,  (val) => { selectedSeconds = val; });
     renderIntentionsList();
 
     // --- WORD COUNTER ---
@@ -91,14 +92,6 @@ document.addEventListener('DOMContentLoaded', function() {
         await generateMandala(currentIntention);
     });
 
-    // --- DOWNLOAD PNG ---
-    downloadPngBtn.addEventListener('click', function() {
-        const link    = document.createElement('a');
-        link.download = `intention-mandala-${Date.now()}.png`;
-        link.href     = canvas.toDataURL('image/png');
-        link.click();
-    });
-
     // --- MUTE / UNMUTE ---
     muteBtn.addEventListener('click', function() {
         if (!audioEngine) return;
@@ -107,10 +100,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- BEGIN MEDITATION BUTTON ---
-    // Validates that the user has selected at least 1 minute before starting.
-    // Zero hours and zero minutes is not a valid meditation duration.
+    // Validates that at least 1 second is selected before starting.
+    // Zero on all three wheels is not a valid meditation duration.
     startTimerBtn.addEventListener('click', function() {
-        const totalSeconds = (selectedHours * 3600) + (selectedMinutes * 60);
+        const totalSeconds = (selectedHours * 3600) + (selectedMinutes * 60) + selectedSeconds;
         if (totalSeconds === 0) {
             alert('Please select a meditation duration greater than zero.');
             return;
@@ -142,7 +135,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // SCROLL WHEEL PICKER
 // ─────────────────────────────────────────────
 
-// Builds a scroll wheel for a numeric range and attaches drag/touch scroll handlers.
+// Builds a scroll wheel for a numeric range and attaches drag/touch/mouse-wheel handlers.
 // containerId: the DOM element to populate with wheel items
 // min/max: the numeric range to display
 // defaultValue: which value is selected when the wheel first renders
@@ -155,7 +148,7 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
     const items = [];
     for (let i = min; i <= max; i++) {
         const item = document.createElement('div');
-        item.className  = 'wheel-item';
+        item.className   = 'wheel-item';
         item.textContent = String(i).padStart(2, '0');
         item.dataset.value = i;
         track.appendChild(item);
@@ -163,8 +156,8 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
     }
     container.appendChild(track);
 
-    const itemHeight  = 44; // must match CSS .wheel-item height
-    const totalItems  = max - min + 1;
+    const itemHeight = 44; // must match CSS .wheel-item height
+    const totalItems = max - min + 1;
 
     // Snaps the wheel to the nearest item and updates the selected value.
     // Called after every drag/scroll gesture ends.
@@ -174,7 +167,7 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
 
         items.forEach((item, i) => {
             item.classList.remove('selected', 'near-selected');
-            if (i === clamped)              item.classList.add('selected');
+            if (i === clamped)                   item.classList.add('selected');
             else if (Math.abs(i - clamped) === 1) item.classList.add('near-selected');
         });
 
@@ -182,25 +175,23 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
     }
 
     // Initialize wheel at the default value
-    const defaultIndex = defaultValue - min;
-    snapToIndex(defaultIndex);
+    snapToIndex(defaultValue - min);
 
     // --- MOUSE DRAG ---
-    let isDragging  = false;
-    let startY      = 0;
-    let startOffset = defaultIndex * itemHeight;
-    let currentOffset = startOffset;
+    let isDragging    = false;
+    let startY        = 0;
+    let currentOffset = (defaultValue - min) * itemHeight;
 
     container.addEventListener('mousedown', (e) => {
         isDragging    = true;
         startY        = e.clientY;
-        currentOffset = (Math.abs(parseInt(track.style.transform.replace('translateY(', '') || '0')));
+        currentOffset = Math.abs(parseInt(track.style.transform.replace('translateY(', '') || '0'));
         e.preventDefault();
     });
 
     document.addEventListener('mousemove', (e) => {
         if (!isDragging) return;
-        const delta  = startY - e.clientY;
+        const delta     = startY - e.clientY;
         const newOffset = Math.max(0, Math.min(currentOffset + delta, (totalItems - 1) * itemHeight));
         track.style.transform = `translateY(${-newOffset}px)`;
     });
@@ -214,9 +205,8 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
     });
 
     // --- TOUCH DRAG (mobile) ---
-    // Touch events mirror mouse events — same snap logic applies
     let touchStartY      = 0;
-    let touchStartOffset = defaultIndex * itemHeight;
+    let touchStartOffset = (defaultValue - min) * itemHeight;
 
     container.addEventListener('touchstart', (e) => {
         touchStartY      = e.touches[0].clientY;
@@ -238,7 +228,7 @@ function buildWheel(containerId, min, max, defaultValue, onChange) {
     });
 
     // --- MOUSE WHEEL SCROLL ---
-    // Allows desktop users to scroll with their mouse wheel over the picker
+    // Allows desktop users to scroll the picker with their mouse wheel
     container.addEventListener('wheel', (e) => {
         e.preventDefault();
         const currentIndex = Math.round(Math.abs(parseInt(track.style.transform.replace('translateY(', '') || '0')) / itemHeight);
@@ -274,9 +264,7 @@ function loadIntentions() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         return raw ? JSON.parse(raw) : [];
-    } catch(e) {
-        return [];
-    }
+    } catch(e) { return []; }
 }
 
 function deleteIntention(index) {
@@ -302,7 +290,7 @@ function renderIntentionsList() {
     list.innerHTML = '';
 
     intentions.forEach((entry, index) => {
-        const card    = document.createElement('div');
+        const card     = document.createElement('div');
         card.className = 'intention-card';
 
         const date      = new Date(entry.timestamp);
@@ -414,21 +402,19 @@ async function generateMandala(intentionText) {
 // MEDITATION TIMER
 // ─────────────────────────────────────────────
 
-// Starts the countdown from the total seconds selected on the wheel picker.
-// Hides the wheel picker and shows the live countdown while running.
-// The spiral dissolve and audio fade at completion are identical to the
-// preset button version — only the duration source has changed.
+// Starts countdown from total seconds derived from all three wheels.
+// Hides the wheel picker UI and shows the live countdown while running.
+// The spiral dissolve and audio fade at completion are unchanged from
+// previous versions — only the duration source has changed.
 function startTimer(totalSeconds) {
     cancelTimer();
-
     timerSeconds = totalSeconds;
 
-    const wheelPicker  = document.getElementById('wheelPicker');
+    const wheelPicker   = document.getElementById('wheelPicker');
     const startTimerBtn = document.getElementById('startTimerBtn');
-    const timerLabel   = document.querySelector('.timer-label');
-    const countdown    = document.getElementById('countdown');
+    const timerLabel    = document.querySelector('.timer-label');
+    const countdown     = document.getElementById('countdown');
 
-    // Hide wheel and button during meditation — reduces visual distraction
     wheelPicker.style.display   = 'none';
     startTimerBtn.style.display = 'none';
     timerLabel.style.display    = 'none';
@@ -447,21 +433,16 @@ function startTimer(totalSeconds) {
     }, 1000);
 }
 
-// Formats seconds into HH:MM:SS or MM:SS depending on whether hours are selected.
-// HH:MM:SS is shown when the session is longer than 59 minutes.
+// Formats total seconds into HH:MM:SS always — consistent display regardless of duration
 function updateCountdownDisplay(seconds) {
-    const h    = Math.floor(seconds / 3600);
-    const m    = Math.floor((seconds % 3600) / 60);
-    const s    = seconds % 60;
-    const mm   = String(m).padStart(2, '0');
-    const ss   = String(s).padStart(2, '0');
-    const display = h > 0
-        ? `${String(h).padStart(2, '0')}:${mm}:${ss}`
-        : `${mm}:${ss}`;
-    document.getElementById('countdownDisplay').textContent = display;
+    const h  = Math.floor(seconds / 3600);
+    const m  = Math.floor((seconds % 3600) / 60);
+    const s  = seconds % 60;
+    document.getElementById('countdownDisplay').textContent =
+        `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-// Cancels a running timer and restores the wheel picker UI.
+// Cancels a running timer and restores the wheel picker UI
 function cancelTimer() {
     if (timerInterval) {
         clearInterval(timerInterval);
