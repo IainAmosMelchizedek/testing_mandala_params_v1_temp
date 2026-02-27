@@ -571,3 +571,144 @@ footer {
     padding: 20px;
     font-size: 0.9em;
 }
+
+/* =============================================================
+   SCROLL WHEEL TIMER PICKER STYLES
+   Purpose: iPhone-style scroll wheel for hours and minutes selection.
+   Two side-by-side scrollable columns with a highlight band showing
+   the currently selected value. Driven by JavaScript scroll events.
+   ============================================================= */
+
+/* Outer wrapper — centers the two wheel columns horizontally */
+.wheel-picker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 15px auto;
+    user-select: none; /* prevents text selection while scrolling */
+}
+
+/* Each column contains a label and a scrollable wheel */
+.wheel-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+/* HRS / MIN label above each wheel */
+.wheel-label {
+    color: #95a5a6;
+    font-size: 0.75em;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+/* The colon separator between hours and minutes wheels */
+.wheel-separator {
+    font-size: 2em;
+    font-weight: bold;
+    color: #f39c12;
+    margin-top: 15px;
+    text-shadow: 0 0 10px rgba(243, 156, 18, 0.5);
+}
+
+/* Scrollable wheel container.
+   Fixed height shows exactly 5 items at a time (item height 44px × 5 = 220px).
+   overflow hidden clips items outside the visible area.
+   The highlight band is created using a gradient overlay via ::before. */
+.wheel-scroll {
+    position: relative;
+    width: 80px;
+    height: 220px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(243, 156, 18, 0.3);
+    border-radius: 10px;
+    cursor: grab;
+}
+
+.wheel-scroll:active {
+    cursor: grabbing;
+}
+
+/* Gradient overlay creates the fade-out effect at top and bottom of the wheel,
+   and a transparent center band highlights the selected item.
+   The center 44px gap in the gradient aligns with the selected item height. */
+.wheel-scroll::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(0, 0, 0, 0.8) 0%,
+        rgba(0, 0, 0, 0.4) 30%,
+        transparent 40%,
+        transparent 60%,
+        rgba(0, 0, 0, 0.4) 70%,
+        rgba(0, 0, 0, 0.8) 100%
+    );
+    pointer-events: none; /* overlay does not block scroll events */
+    z-index: 2;
+    border-radius: 10px;
+}
+
+/* Gold highlight band marks the selected item in the center of the wheel.
+   Height matches one item (44px). Positioned at the center of the 220px wheel. */
+.wheel-scroll::after {
+    content: '';
+    position: absolute;
+    top: 88px; /* (220px - 44px) / 2 = 88px */
+    left: 0;
+    right: 0;
+    height: 44px;
+    border-top: 1px solid rgba(243, 156, 18, 0.6);
+    border-bottom: 1px solid rgba(243, 156, 18, 0.6);
+    background: rgba(243, 156, 18, 0.08);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Inner scrollable track — contains all the number items.
+   Padding top and bottom add 2 blank items above and below the list
+   so the first and last values can be centered in the selection band. */
+.wheel-track {
+    position: relative;
+    z-index: 0;
+    padding: 88px 0; /* 2 items × 44px = 88px top and bottom padding */
+    transition: transform 0.15s ease-out; /* smooth snap animation */
+}
+
+/* Individual number item in the wheel */
+.wheel-item {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6em;
+    font-weight: bold;
+    font-family: monospace;
+    color: #95a5a6;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+/* Selected item — gold, full size, centered in the highlight band */
+.wheel-item.selected {
+    color: #f39c12;
+    text-shadow: 0 0 12px rgba(243, 156, 18, 0.6);
+    transform: scale(1.1);
+}
+
+/* Items adjacent to selected — slightly brighter than the rest */
+.wheel-item.near-selected {
+    color: #bdc3c7;
+}
+
+/* Begin Meditation button — shown below the wheel picker */
+#startTimerBtn {
+    margin-top: 10px;
+}
