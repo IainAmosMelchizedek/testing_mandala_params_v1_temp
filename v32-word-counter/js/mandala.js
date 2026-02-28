@@ -5,19 +5,20 @@
 // (longitude, latitude, radius) using the navigator's celestial sphere model and
 // golden ratio distribution. The MERIDIAN-HASH provenance is immutable.
 //
-// 3D ROTATION LAYER (new):
-// Points are now rotated on all three axes before projection to screen:
-//   X axis — tilt forward/backward (nodding motion)
-//   Y axis — tilt left/right (shaking motion)
-//   Z axis — spin counterclockwise (existing rotation)
+// 4D ROTATION LAYER (new):
+// Each point is extended into 4D space by adding a W coordinate derived from
+// its position on the sphere. The geometry is then rotated through three 4D planes:
+//   XW plane — geometry folds in ways impossible in 3D
+//   YW plane — a second impossible fold
+//   ZW plane — produces alien geometric transformations
 //
-// All three rotation speeds and phases are hash-seeded so each intention
-// tumbles through space in its own unique orbital pattern.
+// After 4D rotation, points are projected back to 3D via perspective division
+// on the W axis, then projected again to 2D for screen rendering.
+// This double projection is what produces the morphing, folding quality —
+// the viewer sees a 2D shadow of a 4D object rotating through hyperspace.
 //
-// The 3D rotation uses a standard rotation matrix applied to each point's
-// Cartesian coordinates before the final 2D screen projection. This preserves
-// all existing geometry — spherical coords, golden ratio, parallax depth —
-// while adding the third dimensional axis of movement.
+// All 4D rotation speeds and the W coordinate generation are hash-seeded,
+// so each intention produces its own unique hyperspace signature.
 
 class MandalaGenerator {
     constructor(canvas) {
@@ -27,7 +28,7 @@ class MandalaGenerator {
         this.time   = 0;
         this.points = [];
 
-        // Structural parameters — seeded from hash in generate()
+        // Structural parameters
         this.numRings          = 0;
         this.primarySymmetry   = 0;
         this.secondarySymmetry = 0;
@@ -39,29 +40,37 @@ class MandalaGenerator {
         this.lissajousB        = 2;
         this.lissajousDelta    = 0;
 
-        // 3D rotation angles — all three axes, all hash-seeded speeds
-        this.rotX = 0; // tilt forward/backward
-        this.rotY = 0; // tilt left/right
-        this.rotZ = 0; // spin counterclockwise (existing)
+        // 3D rotation angles
+        this.rotX = 0;
+        this.rotY = 0;
+        this.rotZ = 0;
 
-        // Hash-seeded rotation speeds for each axis.
-        // Z is negative for counterclockwise. X and Y oscillate to create
-        // a tumbling rather than a continuous roll on those axes.
-        this.speedX = 0;
-        this.speedY = 0;
-        this.speedZ = -0.005; // base counterclockwise Z speed
+        // 4D rotation angles — three additional rotation planes in hyperspace
+        this.rotXW = 0; // XW plane rotation
+        this.rotYW = 0; // YW plane rotation
+        this.rotZW = 0; // ZW plane rotation
 
-        // Tilt amplitude — how far the mandala tilts on X and Y axes.
-        // Expressed in radians. Small values (0.1-0.4) look cosmic and subtle.
-        // Large values (>0.6) would make it flip completely — too disorienting.
-        this.tiltAmplitudeX = 0.2;
-        this.tiltAmplitudeY = 0.2;
+        // Hash-seeded rotation speeds
+        this.speedX  = 0;
+        this.speedY  = 0;
+        this.speedZ  = -0.005;
+        this.speedXW = 0; // how fast geometry folds through XW plane
+        this.speedYW = 0;
+        this.speedZW = 0;
+
+        this.tiltAmplitudeX  = 0.2;
+        this.tiltAmplitudeY  = 0.2;
+        this.tiltPhaseOffset = 0;
+
+        // W coordinate scale — controls how much the 4D dimension affects the shape.
+        // Higher values = more dramatic 4D morphing.
+        // Hash-seeded so each intention has its own hyperspace depth.
+        this.wScale = 0.5;
 
         this.hashNumbers   = [];
         this.fullHash      = '';
         this.intentionText = '';
         this.showHash      = true;
-
         this.pulseAmplitude = 0.10;
         this.pulseSpeed     = 0.02;
 
@@ -77,23 +86,23 @@ class MandalaGenerator {
         this.centerY       = this.canvas.height / 2;
     }
 
-    // Extracts all visual and motion parameters from hash bytes.
+    // Extracts all parameters from hash bytes.
     // Bytes 0-4: structure. Bytes 5-9: infinite geometry. Bytes 10-11: breathing.
-    // Bytes 15-19: 3D rotation speeds and tilt amplitudes.
+    // Bytes 15-19: 3D motion. Bytes 20-25: 4D hyperspace parameters.
     async generate(intentionText) {
         this.intentionText = intentionText;
         const hash         = await generateHash(intentionText);
         this.hashNumbers   = hexToNumbers(hash);
         this.fullHash      = hash;
 
-        // Structural parameters
+        // Structural
         const numPoints          = 8  + (this.hashNumbers[0] % 8);
         this.numRings            = 3  + (this.hashNumbers[1] % 5);
         this.primarySymmetry     = [6, 8, 12, 16][this.hashNumbers[2] % 4];
         this.baseHue             = this.hashNumbers[3] % 360;
         this.complexity          = 1  + (this.hashNumbers[4] % 3);
 
-        // Infinite geometry parameters
+        // Infinite geometry
         this.connectionSkip    = 1 + (this.hashNumbers[5] % 7);
         this.secondarySymmetry = [3, 5, 7, 9][this.hashNumbers[6] % 4];
         this.projectionType    = this.hashNumbers[7] % 3;
@@ -103,29 +112,31 @@ class MandalaGenerator {
         this.lissajousB        = pair[1];
         this.lissajousDelta    = (this.hashNumbers[9] / 255) * Math.PI;
 
-        // Breathing parameters
+        // Breathing
         this.pulseAmplitude = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
         this.pulseSpeed     = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
 
-        // 3D rotation parameters — each intention tumbles at its own unique rate.
-        // X and Y speeds are small so the tilt feels like drifting in space,
-        // not like a spinning top. Divided by 2000 keeps them in the 0.0005-0.001 range.
-        this.speedX = (this.hashNumbers[15] / 255) * 0.0008 + 0.0002;
-        this.speedY = (this.hashNumbers[16] / 255) * 0.0008 + 0.0002;
-
-        // Tilt amplitude — how far it tilts. Range 0.15-0.45 radians.
-        // This keeps the tilt visible but never flips the mandala upside down.
-        this.tiltAmplitudeX = 0.15 + (this.hashNumbers[17] / 255) * 0.30;
-        this.tiltAmplitudeY = 0.15 + (this.hashNumbers[18] / 255) * 0.30;
-
-        // Phase offset between X and Y tilts — prevents them from syncing up
-        // into a simple back-and-forth. Creates more complex orbital motion.
+        // 3D motion
+        this.speedX          = (this.hashNumbers[15] / 255) * 0.0008 + 0.0002;
+        this.speedY          = (this.hashNumbers[16] / 255) * 0.0008 + 0.0002;
+        this.tiltAmplitudeX  = 0.15 + (this.hashNumbers[17] / 255) * 0.30;
+        this.tiltAmplitudeY  = 0.15 + (this.hashNumbers[18] / 255) * 0.30;
         this.tiltPhaseOffset = (this.hashNumbers[19] / 255) * Math.PI * 2;
 
-        // Reset all rotation angles for fresh start
-        this.rotX = 0;
-        this.rotY = 0;
-        this.rotZ = 0;
+        // 4D hyperspace parameters.
+        // Speeds are kept very small — 4D rotation is visually powerful even at low speeds.
+        // Too fast and the morphing becomes disorienting rather than hypnotic.
+        this.speedXW = (this.hashNumbers[20] / 255) * 0.003 + 0.0005;
+        this.speedYW = (this.hashNumbers[21] / 255) * 0.003 + 0.0005;
+        this.speedZW = (this.hashNumbers[22] / 255) * 0.002 + 0.0003;
+
+        // wScale: how far each point extends into the 4th dimension.
+        // Range 0.3-0.8 — lower = subtle morphing, higher = dramatic folding.
+        this.wScale = 0.3 + (this.hashNumbers[23] / 255) * 0.5;
+
+        // Reset all rotation angles
+        this.rotX = 0; this.rotY = 0; this.rotZ = 0;
+        this.rotXW = 0; this.rotYW = 0; this.rotZW = 0;
 
         this.points = [];
         for (let i = 0; i < numPoints; i++) {
@@ -135,93 +146,113 @@ class MandalaGenerator {
         return hash;
     }
 
-    // Applies a full 3D rotation matrix to a point in Cartesian space.
-    // Rotation order: X first, then Y, then Z.
-    // Returns the final 2D screen coordinates after perspective projection.
-    // perspectiveDistance controls how strong the perspective effect is —
-    // higher values = flatter (more orthographic), lower = more dramatic perspective.
-    rotate3D(x, y, z, rotX, rotY, rotZ) {
-        // --- X axis rotation (tilt forward/backward) ---
-        const cosX = Math.cos(rotX);
-        const sinX = Math.sin(rotX);
-        const y1   = y * cosX - z * sinX;
-        const z1   = y * sinX + z * cosX;
+    // Rotates a 4D point through all six rotation planes and projects to 3D.
+    // The W coordinate is what makes this 4D — it is the fourth spatial dimension.
+    // After rotation, perspective division on W projects the 4D point to 3D.
+    // Then standard 3D perspective division projects to 2D screen coordinates.
+    //
+    // The morphing effect occurs because as rotXW/rotYW/rotZW change, the W
+    // component shifts, causing the perspective division to produce different
+    // 3D positions from the same original point — geometry literally changes shape.
+    rotate4D(x, y, z, w) {
+        // --- XW plane rotation ---
+        // Mixes X and W coordinates — X position influenced by 4th dimension
+        const cosXW = Math.cos(this.rotXW);
+        const sinXW = Math.sin(this.rotXW);
+        const x1    = x * cosXW - w * sinXW;
+        const w1    = x * sinXW + w * cosXW;
 
-        // --- Y axis rotation (tilt left/right) ---
-        const cosY = Math.cos(rotY);
-        const sinY = Math.sin(rotY);
-        const x2   = x  * cosY + z1 * sinY;
-        const z2   = -x * sinY + z1 * cosY;
+        // --- YW plane rotation ---
+        const cosYW = Math.cos(this.rotYW);
+        const sinYW = Math.sin(this.rotYW);
+        const y1    = y * cosYW - w1 * sinYW;
+        const w2    = y * sinYW + w1 * cosYW;
 
-        // --- Z axis rotation (counterclockwise spin) ---
-        const cosZ = Math.cos(rotZ);
-        const sinZ = Math.sin(rotZ);
-        const x3   = x2 * cosZ - y1 * sinZ;
-        const y3   = x2 * sinZ + y1 * cosZ;
+        // --- ZW plane rotation ---
+        const cosZW = Math.cos(this.rotZW);
+        const sinZW = Math.sin(this.rotZW);
+        const z1    = z * cosZW - w2 * sinZW;
+        const w3    = z * sinZW + w2 * cosZW;
 
-        // Perspective projection — objects further away (positive z2) appear smaller.
-        // perspectiveDistance of 800 gives a subtle but clear depth effect.
+        // --- XY plane rotation (Z axis spin) ---
+        const cosZ = Math.cos(this.rotZ);
+        const sinZ = Math.sin(this.rotZ);
+        const x2   = x1 * cosZ - y1 * sinZ;
+        const y2   = x1 * sinZ + y1 * cosZ;
+
+        // --- XZ plane rotation (Y axis tilt) ---
+        const cosY = Math.cos(this.rotY);
+        const sinY = Math.sin(this.rotY);
+        const x3   = x2 * cosY + z1 * sinY;
+        const z2   = -x2 * sinY + z1 * cosY;
+
+        // --- YZ plane rotation (X axis tilt) ---
+        const cosX = Math.cos(this.rotX);
+        const sinX = Math.sin(this.rotX);
+        const y3   = y2 * cosX - z2 * sinX;
+        const z3   = y2 * sinX + z2 * cosX;
+
+        // 4D → 3D perspective projection via W axis.
+        // wDistance controls the "camera distance" from the 4D object.
+        // Points with larger W values appear further away in the 4th dimension.
+        const wDistance  = 2.0;
+        const wPerspective = wDistance / (wDistance - w3);
+
+        const px = x3 * wPerspective;
+        const py = y3 * wPerspective;
+        const pz = z3 * wPerspective;
+
+        // 3D → 2D perspective projection
         const perspectiveDistance = 800;
-        const perspective = perspectiveDistance / (perspectiveDistance + z2);
+        const zPerspective = perspectiveDistance / (perspectiveDistance + pz);
 
         return {
-            x: x3 * perspective,
-            y: y3 * perspective,
-            z: z2,           // preserved for depth sorting and size scaling
-            perspective      // scaling factor — smaller when further away
+            x:           px * zPerspective,
+            y:           py * zPerspective,
+            z:           pz,
+            perspective: zPerspective * wPerspective // combined depth scaling
         };
     }
 
-    // Projects one spherical point using the hash-selected projection type,
-    // then applies the full 3D rotation matrix.
-    projectAndRotate3D(lon, lat, radius, scale, rotX, rotY, rotZ) {
+    // Projects a spherical point to 4D space by adding a W coordinate,
+    // then applies the full 4D rotation and returns 2D screen coordinates.
+    // The W coordinate is derived from the point's latitude — points near
+    // the poles extend further into the 4th dimension than equatorial points.
+    // This gives the 4D morphing a structured relationship to the sphere geometry.
+    projectAndRotate4D(lon, lat, radius, scale) {
         const phi   = (90 - lat)  * (Math.PI / 180);
         const theta = (lon + 180) * (Math.PI / 180);
 
-        let x, y, z;
+        // Base 3D position from spherical coordinates (orthographic)
+        const x = Math.sin(phi) * Math.cos(theta) * scale * radius;
+        const y = Math.sin(phi) * Math.sin(theta) * scale * radius;
+        const z = Math.cos(phi) * scale * radius;
 
-        if (this.projectionType === 1) {
-            // Stereographic
-            const k = 2 / (1 + Math.cos(phi));
-            x = k * Math.sin(phi) * Math.cos(theta) * scale * radius;
-            y = k * Math.sin(phi) * Math.sin(theta) * scale * radius;
-            z = 0;
-        } else if (this.projectionType === 2) {
-            // Cylindrical
-            x = theta / Math.PI * scale * radius;
-            y = Math.log(Math.tan(phi / 2 + 0.001)) * scale * radius * 0.3;
-            z = 0;
-        } else {
-            // Orthographic — preserves the 3D sphere structure most naturally
-            // for 3D rotation, since points already have implied depth from radius
-            x = Math.sin(phi) * Math.cos(theta) * scale * radius;
-            y = Math.sin(phi) * Math.sin(theta) * scale * radius;
-            z = Math.cos(phi) * scale * radius; // depth from sphere surface
-        }
+        // W coordinate — the 4th dimension.
+        // Using cos(phi) means polar points have maximum W extension,
+        // equatorial points have zero W. This creates a structured 4D shape
+        // rather than arbitrary extension into hyperspace.
+        const w = Math.cos(phi) * scale * radius * this.wScale;
 
-        return this.rotate3D(x, y, z, rotX, rotY, rotZ);
+        return this.rotate4D(x, y, z, w);
     }
 
-    // Draws the Lissajous overlay with 3D rotation applied.
-    drawLissajous(pulse, hue, rotX, rotY, rotZ) {
+    // Lissajous overlay with 4D rotation applied
+    drawLissajous(pulse, hue) {
         const steps = 200;
         const scale = Math.min(this.canvas.width, this.canvas.height) * 0.35 * pulse;
-        const alpha = 0.25;
+        const alpha = 0.2;
 
         this.ctx.beginPath();
         for (let i = 0; i <= steps; i++) {
             const t    = (i / steps) * Math.PI * 2;
             const rawX = Math.sin(this.lissajousA * t + this.lissajousDelta) * scale;
             const rawY = Math.sin(this.lissajousB * t) * scale;
+            // W=0 for Lissajous — it lives in 3D space, not extended into 4D
+            const p    = this.rotate4D(rawX, rawY, 0, 0);
 
-            // Apply 3D rotation to Lissajous points at slower rate for visual separation
-            const p = this.rotate3D(rawX, rawY, 0, rotX * 0.5, rotY * 0.5, rotZ * 0.7);
-
-            const screenX = this.centerX + p.x;
-            const screenY = this.centerY + p.y;
-
-            if (i === 0) this.ctx.moveTo(screenX, screenY);
-            else         this.ctx.lineTo(screenX, screenY);
+            if (i === 0) this.ctx.moveTo(this.centerX + p.x, this.centerY + p.y);
+            else         this.ctx.lineTo(this.centerX + p.x, this.centerY + p.y);
         }
 
         this.ctx.strokeStyle = `hsla(${(hue + 120) % 360}, 60%, 55%, ${alpha})`;
@@ -232,7 +263,6 @@ class MandalaGenerator {
         this.ctx.shadowBlur  = 0;
     }
 
-    // Renders one frame with full 3D rotation applied to all geometry.
     drawMandala(pulse) {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -240,22 +270,29 @@ class MandalaGenerator {
         const scale = Math.min(this.canvas.width, this.canvas.height) / 3;
         const hue   = (this.baseHue + this.time * 10) % 360;
 
-        // Draw Lissajous first so main geometry renders on top
-        this.drawLissajous(pulse, hue, this.rotX, this.rotY, this.rotZ);
+        this.drawLissajous(pulse, hue);
 
         for (let ring = this.numRings - 1; ring >= 0; ring--) {
             const ringRadius = (ring + 1) / this.numRings;
             const alpha      = 0.3 + (ring / this.numRings) * 0.5;
             const ringHue    = (hue + ring * 30) % 360;
 
-            // Parallax depth — inner rings rotate faster on all three axes
+            // Parallax depth applied to all rotation axes including 4D planes
             const depth       = ring / (this.numRings - 1);
             const depthFactor = 0.3 + depth * 1.5;
 
-            // Each ring gets its own rotation angles scaled by depth factor
-            const ringRotX = this.rotX * depthFactor;
-            const ringRotY = this.rotY * depthFactor;
-            const ringRotZ = this.rotZ * depthFactor;
+            // Scale all rotation angles by depth for parallax on every axis
+            const savedRotX  = this.rotX;  const savedRotY  = this.rotY;
+            const savedRotZ  = this.rotZ;
+            const savedRotXW = this.rotXW; const savedRotYW = this.rotYW;
+            const savedRotZW = this.rotZW;
+
+            this.rotX  = savedRotX  * depthFactor;
+            this.rotY  = savedRotY  * depthFactor;
+            this.rotZ  = savedRotZ  * depthFactor;
+            this.rotXW = savedRotXW * depthFactor;
+            this.rotYW = savedRotYW * depthFactor;
+            this.rotZW = savedRotZW * depthFactor;
 
             const symmetries = [this.primarySymmetry, this.secondarySymmetry];
 
@@ -271,23 +308,20 @@ class MandalaGenerator {
                     for (let i = 0; i < this.points.length; i++) {
                         const point = this.points[i];
 
-                        // Get 3D rotated position
-                        const p3d = this.projectAndRotate3D(
+                        const p4d = this.projectAndRotate4D(
                             point.longitude, point.latitude,
                             point.radius * ringRadius * pulse,
-                            scale, ringRotX, ringRotY, ringRotZ
+                            scale
                         );
 
-                        // Apply symmetry rotation in 2D after 3D projection
-                        const sx = p3d.x * cosS - p3d.y * sinS;
-                        const sy = p3d.x * sinS + p3d.y * cosS;
+                        const sx = p4d.x * cosS - p4d.y * sinS;
+                        const sy = p4d.x * sinS + p4d.y * cosS;
 
                         const screenX = this.centerX + sx;
                         const screenY = this.centerY + sy;
 
-                        // Scale dot size by perspective — points further away appear smaller
                         const depthSize = (2 + this.complexity) * pulse *
-                                          (0.7 + depth * 0.6) * p3d.perspective;
+                                          (0.7 + depth * 0.6) * Math.abs(p4d.perspective);
 
                         this.ctx.beginPath();
                         this.ctx.arc(screenX, screenY, Math.max(0.5, depthSize), 0, Math.PI * 2);
@@ -296,18 +330,16 @@ class MandalaGenerator {
                         this.ctx.shadowColor = `hsla(${layerHue}, 80%, 70%, ${layerAlpha})`;
                         this.ctx.fill();
 
-                        // Variable skip connections with 3D perspective scaling
                         const targetIdx = (i + this.connectionSkip) % this.points.length;
                         if (targetIdx !== i) {
-                            const tp = this.points[targetIdx];
-                            const tp3d = this.projectAndRotate3D(
+                            const tp    = this.points[targetIdx];
+                            const tp4d  = this.projectAndRotate4D(
                                 tp.longitude, tp.latitude,
                                 tp.radius * ringRadius * pulse,
-                                scale, ringRotX, ringRotY, ringRotZ
+                                scale
                             );
-
-                            const tx = tp3d.x * cosS - tp3d.y * sinS;
-                            const ty = tp3d.x * sinS + tp3d.y * cosS;
+                            const tx = tp4d.x * cosS - tp4d.y * sinS;
+                            const ty = tp4d.x * sinS + tp4d.y * cosS;
 
                             const cpX = (screenX + this.centerX + tx) / 2 * (0.85 - ring * 0.03) +
                                         this.centerX * (1 - (0.85 - ring * 0.03));
@@ -325,6 +357,10 @@ class MandalaGenerator {
                     }
                 }
             });
+
+            // Restore master rotation angles after depth scaling
+            this.rotX  = savedRotX;  this.rotY  = savedRotY;  this.rotZ  = savedRotZ;
+            this.rotXW = savedRotXW; this.rotYW = savedRotYW; this.rotZW = savedRotZW;
         }
 
         // Center dot
@@ -387,21 +423,22 @@ class MandalaGenerator {
         }
     }
 
-    // Animation loop with hash-seeded breathing and full 3D rotation.
-    // X and Y axes use sine wave oscillation — the mandala tilts and returns
-    // rather than rolling continuously, creating a drifting orbital quality.
-    // Z axis decrements continuously for counterclockwise spin.
+    // Animation loop — advances all six rotation planes simultaneously.
+    // 4D planes advance at hash-seeded speeds, creating continuous hyperspace rotation.
+    // X and Y use sine oscillation for drifting tilt. Z and 4D planes advance continuously.
     startBreathing() {
         const animate = () => {
             this.time += this.pulseSpeed;
 
-            // Z axis: continuous counterclockwise spin
+            // 3D rotations
             this.rotZ += this.speedZ;
+            this.rotX  = Math.sin(this.time * this.speedX * 100) * this.tiltAmplitudeX;
+            this.rotY  = Math.sin(this.time * this.speedY * 100 + this.tiltPhaseOffset) * this.tiltAmplitudeY;
 
-            // X and Y axes: sinusoidal oscillation creates drifting tilt.
-            // Phase offset between X and Y prevents them locking into simple patterns.
-            this.rotX = Math.sin(this.time * this.speedX * 100) * this.tiltAmplitudeX;
-            this.rotY = Math.sin(this.time * this.speedY * 100 + this.tiltPhaseOffset) * this.tiltAmplitudeY;
+            // 4D hyperspace rotations — continuous advancement through hyperspace
+            this.rotXW += this.speedXW;
+            this.rotYW += this.speedYW;
+            this.rotZW += this.speedZW;
 
             const pulse = 1.0 +
                 Math.sin(this.time) * this.pulseAmplitude +
@@ -420,7 +457,7 @@ class MandalaGenerator {
         }
     }
 
-    // Spiral dissolve with 3D rotation accelerating as it collapses inward
+    // Spiral dissolve — accelerates all six rotation planes during collapse
     spiralDissolve(duration) {
         this.stopBreathing();
 
@@ -432,10 +469,12 @@ class MandalaGenerator {
             step++;
             const scale = Math.max(0.001, 1 - (step / steps));
 
-            // Accelerate all three rotation axes during dissolve
-            this.rotZ -= step * 0.01;
-            this.rotX += step * 0.005;
-            this.rotY += step * 0.005;
+            this.rotZ  -= step * 0.01;
+            this.rotX  += step * 0.005;
+            this.rotY  += step * 0.005;
+            this.rotXW += step * 0.008; // 4D planes accelerate faster during dissolve
+            this.rotYW += step * 0.006;
+            this.rotZW += step * 0.007;
 
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
