@@ -1,23 +1,26 @@
 // mandala.js - Sacred geometry renderer for the Intention Keeper
 //
-// FOUNDATION (unchanged across both styles):
+// FOUNDATION (unchanged):
 // All point positions derive from SHA-256 hash bytes mapped to spherical coordinates
 // (longitude, latitude, radius) using the navigator's celestial sphere model and
 // golden ratio distribution. The MERIDIAN-HASH provenance is immutable.
 //
-// TWO VISUAL STYLES — same hash, same points, different rendering:
+// TWO VISUAL STYLES:
 //
-// SACRED — clean, minimal, navigational
-//   Single symmetry, consecutive point connections, depth-of-field parallax,
-//   smaller dots, no Lissajous overlay. Honors the original navigational vision.
+// SACRED — stable, clean, navigational
+//   Single symmetry, consecutive connections, depth-of-field parallax,
+//   smaller dots. The geometry is fixed — the same form breathes and rotates.
+//   Honors the original navigational vision of a unique constellation per intention.
 //
-// COSMIC — dense, complex, infinite
-//   Mixed dual symmetry, variable connection skip, Lissajous overlay,
-//   larger glowing dots. Expresses the infinite geometric possibilities
-//   of the same mathematical foundation.
+// COSMIC — continuously evolving, infinite
+//   The geometry itself evolves over time. Connection skip cycles slowly through
+//   different polygon families. Lissajous phase advances independently of rotation,
+//   producing ever-changing knot forms. Secondary symmetry interference shifts.
+//   No two moments look the same — the mandala continuously discovers new forms
+//   from the same intention, like looking into a living mathematical universe.
 //
-// Style is toggled by the user via a UI button. The mandala regenerates
-// instantly from the stored hash — no re-hashing required on style change.
+// The navigational foundation (spherical coords, golden ratio, MERIDIAN-HASH)
+// is identical in both styles and completely unchanged by style switching.
 
 class MandalaGenerator {
     constructor(canvas) {
@@ -38,6 +41,12 @@ class MandalaGenerator {
         this.lissajousB        = 2;
         this.lissajousDelta    = 0;
 
+        // Evolution speed parameters — seeded from hash, control how fast
+        // the Cosmic style cycles through different geometric forms
+        this.skipEvolutionSpeed    = 0.001; // how fast connection skip cycles
+        this.lissajousEvolutionSpeed = 0.003; // how fast Lissajous phase evolves
+        this.symmetryEvolutionSpeed  = 0.0005; // how fast secondary symmetry shifts
+
         this.hashNumbers   = [];
         this.fullHash      = '';
         this.intentionText = '';
@@ -48,7 +57,6 @@ class MandalaGenerator {
         this.rotationAngle  = 0;
 
         // Active style — 'sacred' or 'cosmic'. Default is sacred.
-        // Changed by app.js when the user clicks the style toggle button.
         this.style = 'sacred';
 
         this.resizeCanvas();
@@ -64,22 +72,22 @@ class MandalaGenerator {
     }
 
     // Hashes the intention and extracts all visual parameters.
-    // Both styles share the same hash and point positions —
-    // only the rendering decisions differ between Sacred and Cosmic.
+    // Evolution speed parameters are seeded from hash bytes 20-22 so each
+    // intention evolves at its own unique rate in Cosmic mode.
     async generate(intentionText) {
         this.intentionText = intentionText;
         const hash         = await generateHash(intentionText);
         this.hashNumbers   = hexToNumbers(hash);
         this.fullHash      = hash;
 
-        // Structural parameters — shared by both styles
+        // Structural — shared by both styles
         const numPoints          = 8  + (this.hashNumbers[0] % 8);
         this.numRings            = 3  + (this.hashNumbers[1] % 5);
         this.primarySymmetry     = [6, 8, 12, 16][this.hashNumbers[2] % 4];
         this.baseHue             = this.hashNumbers[3] % 360;
         this.complexity          = 1  + (this.hashNumbers[4] % 3);
 
-        // Cosmic-only parameters — extracted always but only used when style = 'cosmic'
+        // Cosmic geometry parameters — extracted always, used only in Cosmic style
         this.connectionSkip    = 1 + (this.hashNumbers[5] % 7);
         this.secondarySymmetry = [3, 5, 7, 9][this.hashNumbers[6] % 4];
         const lissajousPairs   = [[3,2],[4,3],[5,4],[5,3],[7,4],[6,5]];
@@ -88,10 +96,18 @@ class MandalaGenerator {
         this.lissajousB        = pair[1];
         this.lissajousDelta    = (this.hashNumbers[9] / 255) * Math.PI;
 
-        // Breathing parameters — shared by both styles
+        // Breathing — shared by both styles
         this.pulseAmplitude = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
         this.pulseSpeed     = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
-        this.rotationAngle  = 0;
+
+        // Evolution speeds — unique per intention, only active in Cosmic style.
+        // Range kept slow so transitions feel organic rather than jarring.
+        this.skipEvolutionSpeed      = 0.0005 + (this.hashNumbers[20] / 255) * 0.001;
+        this.lissajousEvolutionSpeed = 0.001  + (this.hashNumbers[21] / 255) * 0.004;
+        this.symmetryEvolutionSpeed  = 0.0002 + (this.hashNumbers[22] / 255) * 0.0008;
+
+        this.rotationAngle = 0;
+        this.time          = 0;
 
         this.points = [];
         for (let i = 0; i < numPoints; i++) {
@@ -101,15 +117,12 @@ class MandalaGenerator {
         return hash;
     }
 
-    // Switches between Sacred and Cosmic styles and redraws immediately.
-    // Called by app.js when the user clicks the style toggle button.
-    // No re-hashing needed — all parameters are already stored.
+    // Switches rendering style. No re-hashing needed.
     setStyle(styleName) {
         this.style = styleName;
     }
 
     // Orthographic projection — the navigational projection used by both styles.
-    // Preserves the circular, celestial sphere appearance of the mandala.
     projectPoint(lon, lat, radius, scale) {
         const phi   = (90 - lat)  * (Math.PI / 180);
         const theta = (lon + 180) * (Math.PI / 180);
@@ -119,8 +132,7 @@ class MandalaGenerator {
         };
     }
 
-    // Rotates a point counterclockwise around canvas center.
-    // Direct coordinate rotation prevents the optical illusion caused by ctx.rotate().
+    // Direct coordinate rotation — prevents the optical illusion from ctx.rotate()
     rotatePoint(x, y, angle) {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
@@ -133,8 +145,9 @@ class MandalaGenerator {
     }
 
     // Lissajous overlay — only drawn in Cosmic style.
-    // Provides a second independent geometric layer beneath the main mandala.
-    drawLissajous(pulse, hue) {
+    // lissajousPhase is time-driven in Cosmic mode, causing the knot form
+    // to continuously morph rather than simply rotating.
+    drawLissajous(pulse, hue, lissajousPhase) {
         const steps = 200;
         const scale = Math.min(this.canvas.width, this.canvas.height) * 0.35 * pulse;
         const alpha = 0.25;
@@ -142,8 +155,10 @@ class MandalaGenerator {
         this.ctx.beginPath();
         for (let i = 0; i <= steps; i++) {
             const t      = (i / steps) * Math.PI * 2;
-            const rawX   = Math.sin(this.lissajousA * t + this.lissajousDelta) * scale;
-            const rawY   = Math.sin(this.lissajousB * t) * scale;
+            // Phase advances independently of rotation — this is what makes
+            // the knot form continuously discover new shapes over time
+            const rawX   = Math.sin(this.lissajousA * t + this.lissajousDelta + lissajousPhase) * scale;
+            const rawY   = Math.sin(this.lissajousB * t + lissajousPhase * 0.7) * scale;
             const rotated = this.rotatePoint(
                 this.centerX + rawX,
                 this.centerY + rawY,
@@ -161,27 +176,27 @@ class MandalaGenerator {
         this.ctx.shadowBlur  = 0;
     }
 
-    // Draws one ring of geometry for either style.
-    // Sacred uses single symmetry and consecutive connections.
-    // Cosmic uses dual symmetry, variable skip connections, and larger dots.
-    drawRing(ring, pulse, hue) {
+    // Draws one ring. Sacred uses fixed parameters. Cosmic uses time-evolved parameters
+    // so the geometry continuously shifts between different polygon families and symmetries.
+    drawRing(ring, pulse, hue, evolvedSkip, evolvedSymmetry) {
         const ringRadius = (ring + 1) / this.numRings;
         const alpha      = 0.3 + (ring / this.numRings) * 0.5;
         const ringHue    = (hue + ring * 30) % 360;
         const scale      = Math.min(this.canvas.width, this.canvas.height) / 3;
 
-        // Parallax depth — inner rings rotate faster regardless of style
         const depth        = ring / (this.numRings - 1 || 1);
         const depthFactor  = 0.3 + depth * 1.5;
         const ringRotation = this.rotationAngle * depthFactor;
 
-        // Sacred uses only primary symmetry. Cosmic adds a secondary layer.
+        // Sacred uses fixed primary symmetry only.
+        // Cosmic uses both primary and the time-evolved secondary symmetry.
         const symmetries = this.style === 'cosmic'
-            ? [this.primarySymmetry, this.secondarySymmetry]
+            ? [this.primarySymmetry, Math.round(evolvedSymmetry)]
             : [this.primarySymmetry];
 
-        // Sacred connects consecutive points. Cosmic skips based on hash byte 5.
-        const skip = this.style === 'cosmic' ? this.connectionSkip : 1;
+        // Sacred uses consecutive connections.
+        // Cosmic uses the time-evolved skip value — slowly cycling through polygon families.
+        const skip = this.style === 'cosmic' ? Math.max(1, Math.round(evolvedSkip)) : 1;
 
         symmetries.forEach((symmetry, symLayerIdx) => {
             const layerHue   = symLayerIdx === 0 ? ringHue : (ringHue + 180) % 360;
@@ -201,7 +216,7 @@ class MandalaGenerator {
                     );
                     const final = this.rotatePoint(symRotated.x, symRotated.y, ringRotation);
 
-                    // Sacred dots are smaller and crisper. Cosmic dots glow larger.
+                    // Sacred dots smaller and crisper. Cosmic dots glow larger.
                     const dotScale  = this.style === 'sacred' ? 0.6 : 1.0;
                     const depthSize = (2 + this.complexity) * pulse * (0.7 + depth * 0.6) * dotScale;
 
@@ -212,11 +227,10 @@ class MandalaGenerator {
                     this.ctx.shadowColor = `hsla(${layerHue}, 80%, 70%, ${layerAlpha})`;
                     this.ctx.fill();
 
-                    // Draw connections to target point based on skip value
                     const targetIdx = (i + skip) % this.points.length;
                     if (targetIdx !== i) {
-                        const tp         = this.points[targetIdx];
-                        const tBase      = this.projectPoint(
+                        const tp      = this.points[targetIdx];
+                        const tBase   = this.projectPoint(
                             tp.longitude, tp.latitude,
                             tp.radius * ringRadius * pulse, scale
                         );
@@ -249,15 +263,27 @@ class MandalaGenerator {
 
         const hue = (this.baseHue + this.time * 10) % 360;
 
-        // Lissajous only renders in Cosmic style
-        if (this.style === 'cosmic') this.drawLissajous(pulse, hue);
+        // Cosmic evolution — parameters that change continuously over time.
+        // skipEvolved oscillates between 1 and 7 using a slow sine wave —
+        // the mandala gradually transitions between different polygon families.
+        // evolvedSymmetry slowly drifts between the hash-seeded secondary values.
+        const skipEvolved      = this.style === 'cosmic'
+            ? 1 + ((Math.sin(this.time * this.skipEvolutionSpeed * 100) + 1) / 2) * 6
+            : 1;
+        const evolvedSymmetry  = this.style === 'cosmic'
+            ? this.secondarySymmetry + Math.sin(this.time * this.symmetryEvolutionSpeed * 100) * 2
+            : this.secondarySymmetry;
+        const lissajousPhase   = this.style === 'cosmic'
+            ? this.time * this.lissajousEvolutionSpeed * 100
+            : 0;
 
-        // Draw rings back to front for correct depth ordering
+        if (this.style === 'cosmic') this.drawLissajous(pulse, hue, lissajousPhase);
+
         for (let ring = this.numRings - 1; ring >= 0; ring--) {
-            this.drawRing(ring, pulse, hue);
+            this.drawRing(ring, pulse, hue, skipEvolved, evolvedSymmetry);
         }
 
-        // Center dot — anchor point shared by both styles
+        // Center dot
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, 5 * pulse, 0, Math.PI * 2);
         this.ctx.fillStyle   = `hsl(${this.baseHue}, 80%, 70%)`;
@@ -317,15 +343,18 @@ class MandalaGenerator {
         }
     }
 
-    // Animation loop — counterclockwise rotation with hash-seeded breathing.
+    // Animation loop — both styles use the same loop.
+    // this.time drives both the breathing and the Cosmic evolution parameters.
     startBreathing() {
         const rotationStep = -0.005;
         const animate = () => {
             this.time += this.pulseSpeed;
             this.rotationAngle += rotationStep;
+
             const pulse = 1.0 +
                 Math.sin(this.time) * this.pulseAmplitude +
                 Math.sin(this.time * 1.6) * (this.pulseAmplitude * 0.2);
+
             this.drawMandala(pulse);
             this.animationFrame = requestAnimationFrame(animate);
         };
@@ -339,7 +368,7 @@ class MandalaGenerator {
         }
     }
 
-    // Spiral dissolve — shrinks and rotates inward over the given duration.
+    // Spiral dissolve — both styles use the same dissolve.
     spiralDissolve(duration) {
         this.stopBreathing();
         const steps    = 60;
