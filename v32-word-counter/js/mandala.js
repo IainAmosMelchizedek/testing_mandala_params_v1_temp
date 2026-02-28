@@ -459,4 +459,3 @@ class MandalaGenerator {
         return this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
     }
 }
-
