@@ -1,19 +1,30 @@
-// audio.js - Two-layer sacred audio engine for the Intention Keeper
+// audio.js - Hash-seeded water soundscape engine for the Intention Keeper
 //
-// LAYER 1: Heartbeat pulse at 7.83 Hz — the Schumann Resonance.
-// Earth's natural electromagnetic frequency, often called the planet's heartbeat.
-// Associated with grounding, autonomic nervous system calming, and meditative states.
-// Source: Siever & Collura, "Audio-Visual Entrainment" (Elsevier, 2017);
-//         Balser & Wagner (1960), Nature.
+// CONCEPT:
+// Replaces the heartbeat/sitar layers with a flowing water soundscape.
+// The 7.83 Hz Schumann Resonance is expressed as a gentle volume modulation —
+// the water breathes at Earth's electromagnetic frequency rather than thumping it.
+// This creates a felt resonance rather than a heard beat.
 //
-// LAYER 2: Sitar harmonic at 852 Hz — the Third Eye Chakra (Ajna) frequency.
-// Associated with spiritual insight, awakening intuition, and return to spiritual order.
-// Chosen specifically for an intention-setting tool because the act of setting an
-// intention is itself an act of inner vision and directed consciousness.
-// Source: Solfeggio frequency tradition; Belle Health review (2025).
+// AUDIO ARCHITECTURE:
+// White noise → Low-pass filter → Gain modulation → Compressor → Master gain
 //
-// The harmonic interval applied to 852 Hz is hash-derived — so each intention
-// produces a unique overtone while remaining rooted in the same sacred frequency.
+// White noise contains all frequencies equally. The low-pass filter removes
+// high frequencies, leaving the warm rushing quality of water or wind.
+// Slowly modulating the filter cutoff frequency creates the ebb and flow
+// of water movement — rising and receding like waves or a stream.
+//
+// HASH-SEEDED ELEMENTS (unique per intention):
+// - Filter cutoff frequency: determines whether it sounds like distant ocean,
+//   rushing stream, or gentle rain
+// - Modulation depth: how dramatically the water rises and falls
+// - Secondary tone: a barely audible sine wave at the hash-derived frequency
+//   adds a subtle tonal character beneath the water — like a resonant cave
+//   or the hum of a deep river
+//
+// FIXED ELEMENTS (same for all intentions):
+// - Schumann Resonance modulation rate: 7.83 Hz — Earth's heartbeat expressed
+//   as the breathing rhythm of the water volume
 
 class IntentionAudioEngine {
     constructor() {
@@ -22,136 +33,159 @@ class IntentionAudioEngine {
         this.masterGain = null;
         this.compressor = null;
 
-        // Interval handles — cleared on stop()
-        this.heartbeatInterval = null;
-        this.sitarInterval     = null;
+        // Noise source and filter nodes
+        this.noiseSource    = null;
+        this.noiseFilter    = null;
+        this.noiseGain      = null;
+
+        // Secondary resonant tone beneath the water
+        this.resonantOsc    = null;
+        this.resonantGain   = null;
+
+        // Schumann modulation — LFO that makes the water breathe at 7.83 Hz
+        this.schumannLFO    = null;
+        this.schumannGain   = null;
 
         this.muted   = false;
         this.running = false;
 
-        // CLINICAL CONSTANT: 7.83 Hz — Schumann Resonance, Earth's electromagnetic heartbeat.
-        // Kept fixed across all intentions — this is the grounding anchor of the soundscape.
-        this.ENTRAINMENT_HZ = 7.83;
+        // CLINICAL CONSTANT: 7.83 Hz Schumann Resonance.
+        // Applied as LFO modulation rate on the water volume —
+        // the water breathes at Earth's electromagnetic heartbeat.
+        this.SCHUMANN_HZ = 7.83;
 
-        // SACRED CONSTANT: 852 Hz — Third Eye Chakra (Ajna) Solfeggio frequency.
-        // Promotes spiritual insight and intuitive clarity — aligned with intention setting.
-        // Kept fixed so the spiritual resonance is consistent across all intentions.
-        this.THIRD_EYE_HZ = 53.25;
-
-        // Hash-derived harmonic interval — set in extractAudioParams().
-        // Varies per intention so each sitar tone is unique while staying consonant with 852 Hz.
-        this.harmonicInterval = 1.5;
+        // Hash-derived parameters — set in extractAudioParams() before audio starts
+        this.filterCutoff      = 800;  // Hz — controls water character
+        this.modulationDepth   = 400;  // Hz — how much the filter sweeps
+        this.resonantFrequency = 110;  // Hz — subtle tonal undertone
     }
 
-    // Initializes AudioContext and processing chain: Layers → Compressor → MasterGain → Speakers.
-    // Called once on first use. Subsequent calls are no-ops.
+    // Initializes AudioContext and the signal chain.
+    // Chain: Sources → Compressor → MasterGain → Speakers
     initContext() {
         if (this.ctx) return;
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // Compressor prevents clipping when both layers fire simultaneously
         this.compressor = this.ctx.createDynamicsCompressor();
-        this.compressor.threshold.setValueAtTime(-12, this.ctx.currentTime);
+        this.compressor.threshold.setValueAtTime(-18, this.ctx.currentTime);
         this.compressor.knee.setValueAtTime(6,    this.ctx.currentTime);
-        this.compressor.ratio.setValueAtTime(3,   this.ctx.currentTime);
+        this.compressor.ratio.setValueAtTime(4,   this.ctx.currentTime);
         this.compressor.attack.setValueAtTime(0.003, this.ctx.currentTime);
         this.compressor.release.setValueAtTime(0.25,  this.ctx.currentTime);
 
-        // Master gain at 0.75 — slightly lower than before since we only have two layers
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.setValueAtTime(1.5, this.ctx.currentTime);
+        this.masterGain.gain.setValueAtTime(0.85, this.ctx.currentTime);
 
         this.compressor.connect(this.masterGain);
         this.masterGain.connect(this.ctx.destination);
     }
 
-    // Extracts only the hash-derived harmonic interval.
-    // The two sacred frequencies (7.83 Hz and 852 Hz) are fixed.
-    // Only the sitar's harmonic relationship to 852 Hz varies per intention.
+    // Derives water character from hash bytes 12-14.
+    // These bytes are distant from the visual parameter bytes (0-11) to keep
+    // audio and visual feeling independent despite sharing the same hash source.
     extractAudioParams(hashNumbers) {
-        // Selects from Indian classical raga-compatible consonant intervals.
-        // Applied as a divisor rather than multiplier to keep the sitar
-        // in a lower, more meditative register relative to 852 Hz.
-        // 1.5 = perfect fifth, 1.333 = perfect fourth,
-        // 1.25 = major third, 1.125 = major second
-        const intervals = [1.5, 1.333, 1.25, 1.125];
-        this.harmonicInterval = intervals[hashNumbers[14] % 4];
+        // Filter cutoff: 400-1200 Hz range
+        // Low values (400-600 Hz) = deep ocean or heavy rain
+        // Mid values (600-900 Hz) = rushing stream or waterfall
+        // High values (900-1200 Hz) = light rain or gentle brook
+        this.filterCutoff = 400 + (hashNumbers[12] / 255) * 800;
+
+        // Modulation depth: how dramatically the filter sweeps up and down.
+        // Wider sweep = more dramatic wave-like motion.
+        // Narrower sweep = steadier, more meditative flow.
+        this.modulationDepth = 200 + (hashNumbers[13] / 255) * 500;
+
+        // Resonant undertone: a barely audible sine wave that gives the water
+        // a subtle tonal identity — each intention has its own resonant note.
+        // Range 80-220 Hz keeps it below the water noise, felt more than heard.
+        this.resonantFrequency = 80 + (hashNumbers[14] / 255) * 140;
     }
 
-    // Heartbeat pulse locked to 7.83 Hz Schumann Resonance.
-    // A soft sine wave burst — felt more than heard, like a distant drum.
-    // Pitch bend downward on attack gives it organic, drum-like quality.
-    // Lower frequency (852 * 0.15 = ~128 Hz) keeps it deep and grounding.
-    startHeartbeat() {
-        const intervalMs = 1000 / this.ENTRAINMENT_HZ; // ~128ms at 7.83 Hz
+    // Generates white noise using a WebAudio AudioBuffer filled with random values.
+    // White noise contains equal energy at all frequencies — the raw material
+    // for all synthesized natural sounds including water, wind, and rain.
+    createNoiseSource() {
+        // Buffer length: 2 seconds of noise at the sample rate.
+        // Looping a 2-second buffer is inaudible to the human ear.
+        const bufferSize  = this.ctx.sampleRate * 2;
+        const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data        = noiseBuffer.getChannelData(0);
 
-        this.heartbeatInterval = setInterval(() => {
-            if (!this.ctx || this.muted) return;
+        for (let i = 0; i < bufferSize; i++) {
+            // Random values between -1 and 1 produce white noise
+            data[i] = Math.random() * 2 - 1;
+        }
 
-            const osc  = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-
-            // Bass hit tuned to a sub-harmonic of 852 Hz for tonal coherence
-            const hitFreq = this.THIRD_EYE_HZ * 0.15; // ~128 Hz — warm bass thud
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(hitFreq * 1.3, this.ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(hitFreq, this.ctx.currentTime + 0.06);
-
-            // Soft attack, medium decay — more like a felt pulse than a sharp drum hit
-            gain.gain.setValueAtTime(0, this.ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(1.5, this.ctx.currentTime + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
-
-            osc.connect(gain);
-            gain.connect(this.compressor);
-            osc.start(this.ctx.currentTime);
-            osc.stop(this.ctx.currentTime + 0.55);
-
-        }, intervalMs);
+        const source  = this.ctx.createBufferSource();
+        source.buffer = noiseBuffer;
+        source.loop   = true; // loop seamlessly for continuous sound
+        return source;
     }
 
-    // Sitar-inspired harmonic tone rooted at 852 Hz — Third Eye Chakra frequency.
-    // Fires on every other heartbeat for a slow, contemplative rhythm.
-    // Triangle wave approximates the warm, bright quality of a plucked sitar string.
-    // The harmonic interval shifts the pitch slightly per intention via hash bytes,
-    // keeping each meditation session tonally unique while staying consonant with 852 Hz.
-    startSitarHarmonic() {
-        const beatMs     = 1000 / this.ENTRAINMENT_HZ;
-        const intervalMs = beatMs * 2; // fires every other heartbeat
+    // Builds and starts the water soundscape.
+    // Signal chain: Noise → Low-pass filter → Gain → Compressor
+    // The Schumann LFO modulates the filter cutoff at 7.83 Hz.
+    startWater() {
+        // --- Noise source ---
+        this.noiseSource = this.createNoiseSource();
 
-        // Small offset so sitar lands just after the heartbeat — call and response feel
-        setTimeout(() => {
-            this.sitarInterval = setInterval(() => {
-                if (!this.ctx || this.muted) return;
+        // --- Low-pass filter ---
+        // Removes high frequencies from white noise, leaving warm rushing sound.
+        // Q value of 1.5 adds slight resonance at the cutoff — more water-like.
+        this.noiseFilter = this.ctx.createBiquadFilter();
+        this.noiseFilter.type            = 'lowpass';
+        this.noiseFilter.frequency.value = this.filterCutoff;
+        this.noiseFilter.Q.value         = 1.5;
 
-                const osc  = this.ctx.createOscillator();
-                const gain = this.ctx.createGain();
+        // --- Noise gain ---
+        // Controls the overall water volume before it hits the compressor
+        this.noiseGain = this.ctx.createGain();
+        this.noiseGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
 
-                osc.type = 'triangle';
-                // Divide by harmonic interval to bring frequency down into comfortable range.
-                // 852 / 1.5 = 568 Hz, 852 / 1.333 = 639 Hz, etc. — all meditative ranges.
-                osc.frequency.setValueAtTime(
-                    this.THIRD_EYE_HZ / this.harmonicInterval,
-                    this.ctx.currentTime
-                );
+        // Connect noise chain
+        this.noiseSource.connect(this.noiseFilter);
+        this.noiseFilter.connect(this.noiseGain);
+        this.noiseGain.connect(this.compressor);
 
-                // Plucked string envelope: fast attack, slow decay
-                gain.gain.setValueAtTime(0, this.ctx.currentTime);
-                gain.gain.linearRampToValueAtTime(1.5, this.ctx.currentTime + 0.008);
-                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.8);
+        // --- Schumann LFO ---
+        // A sine wave oscillator at 7.83 Hz modulates the filter cutoff frequency.
+        // This makes the water breathe — rising and falling at Earth's heartbeat.
+        // The LFO output is connected to the filter frequency AudioParam, not to audio output.
+        this.schumannLFO  = this.ctx.createOscillator();
+        this.schumannLFO.type            = 'sine';
+        this.schumannLFO.frequency.value = this.SCHUMANN_HZ;
 
-                osc.connect(gain);
-                gain.connect(this.compressor);
-                osc.start(this.ctx.currentTime);
-                osc.stop(this.ctx.currentTime + 0.85);
+        // schumannGain scales the LFO output to the desired modulation depth in Hz.
+        // A gain of 400 means the filter cutoff swings ±400 Hz around the center value.
+        this.schumannGain = this.ctx.createGain();
+        this.schumannGain.gain.value = this.modulationDepth;
 
-            }, intervalMs);
-        }, 100); // 100ms after heartbeat
+        // LFO → gain → filter frequency parameter (not audio output)
+        this.schumannLFO.connect(this.schumannGain);
+        this.schumannGain.connect(this.noiseFilter.frequency);
+
+        this.noiseSource.start();
+        this.schumannLFO.start();
     }
 
-    // Starts both audio layers simultaneously.
-    // Called automatically when the mandala appears — the Generate button click
-    // satisfies the browser user-gesture requirement for AudioContext.
+    // Adds a barely audible resonant sine tone beneath the water.
+    // This gives the soundscape a subtle tonal identity unique to each intention.
+    // Volume is kept very low (0.08) so it supports rather than dominates the water.
+    startResonantTone() {
+        this.resonantOsc  = this.ctx.createOscillator();
+        this.resonantOsc.type            = 'sine';
+        this.resonantOsc.frequency.value = this.resonantFrequency;
+
+        this.resonantGain = this.ctx.createGain();
+        this.resonantGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+
+        this.resonantOsc.connect(this.resonantGain);
+        this.resonantGain.connect(this.compressor);
+        this.resonantOsc.start();
+    }
+
+    // Starts the full soundscape. Called automatically when the mandala appears.
+    // The Generate button click satisfies the browser user-gesture requirement.
     start(hashNumbers) {
         if (this.running) this.stop();
 
@@ -160,33 +194,48 @@ class IntentionAudioEngine {
 
         if (this.ctx.state === 'suspended') this.ctx.resume();
 
-        this.startHeartbeat();
-        this.startSitarHarmonic();
+        this.startWater();
+        this.startResonantTone();
 
         this.running = true;
         this.muted   = false;
     }
 
-    // Stops both layers and clears all intervals.
+    // Stops all audio and releases nodes for garbage collection.
     // Always call before generating a new mandala to prevent overlapping soundscapes.
     stop() {
-        if (this.heartbeatInterval) { clearInterval(this.heartbeatInterval); this.heartbeatInterval = null; }
-        if (this.sitarInterval)     { clearInterval(this.sitarInterval);     this.sitarInterval     = null; }
+        const nodes = [
+            this.noiseSource, this.schumannLFO,
+            this.resonantOsc
+        ];
+        nodes.forEach(node => {
+            if (node) { try { node.stop(); } catch(e) {} }
+        });
+
+        this.noiseSource  = null;
+        this.noiseFilter  = null;
+        this.noiseGain    = null;
+        this.schumannLFO  = null;
+        this.schumannGain = null;
+        this.resonantOsc  = null;
+        this.resonantGain = null;
+
         this.running = false;
     }
 
     // Toggles mute with smooth gain ramping to prevent audible clicks.
-    // Rhythm timing is preserved so both layers resume in sync when unmuted.
+    // Rhythm timing is irrelevant here since water is continuous — but smooth
+    // ramping still prevents the jarring click of an instant volume cut.
     toggleMute() {
         if (!this.masterGain) return;
 
         this.muted = !this.muted;
 
         if (this.muted) {
-            this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+            this.masterGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.3);
         } else {
             if (this.ctx.state === 'suspended') this.ctx.resume();
-            this.masterGain.gain.linearRampToValueAtTime(0.75, this.ctx.currentTime + 0.1);
+            this.masterGain.gain.linearRampToValueAtTime(0.85, this.ctx.currentTime + 0.3);
         }
 
         return this.muted;
