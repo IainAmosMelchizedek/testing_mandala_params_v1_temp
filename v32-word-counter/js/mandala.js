@@ -3,21 +3,21 @@
 // FOUNDATION (unchanged):
 // All point positions derive from SHA-256 hash bytes mapped to spherical coordinates
 // (longitude, latitude, radius) using the navigator's celestial sphere model and
-// golden ratio distribution. This navigational mathematics is the immutable core.
+// golden ratio distribution. The MERIDIAN-HASH provenance is immutable.
 //
-// INFINITE GEOMETRY LAYER (new):
-// Four additional hash-seeded decisions multiply geometric variety exponentially:
-//   1. Variable connection skip — hash selects how many points to skip when connecting,
-//      producing different polygon families (consecutive, star, complex, alien)
-//   2. Mixed symmetry — hash selects two symmetry values drawn simultaneously,
-//      creating interference patterns impossible with single symmetry
-//   3. Variable projection — hash selects between orthographic, stereographic,
-//      and cylindrical projection of the same spherical points
-//   4. Lissajous overlay — a second geometric layer using sine wave mathematics
-//      seeded from the hash, producing figure-8s, spirals, and knot forms
+// 3D ROTATION LAYER (new):
+// Points are now rotated on all three axes before projection to screen:
+//   X axis — tilt forward/backward (nodding motion)
+//   Y axis — tilt left/right (shaking motion)
+//   Z axis — spin counterclockwise (existing rotation)
 //
-// The same intention always produces the same mandala — all decisions are
-// deterministic functions of the SHA-256 hash. No randomness is introduced.
+// All three rotation speeds and phases are hash-seeded so each intention
+// tumbles through space in its own unique orbital pattern.
+//
+// The 3D rotation uses a standard rotation matrix applied to each point's
+// Cartesian coordinates before the final 2D screen projection. This preserves
+// all existing geometry — spherical coords, golden ratio, parallax depth —
+// while adding the third dimensional axis of movement.
 
 class MandalaGenerator {
     constructor(canvas) {
@@ -27,26 +27,43 @@ class MandalaGenerator {
         this.time   = 0;
         this.points = [];
 
-        // Structural parameters — all seeded from hash in generate()
-        this.numRings        = 0;
-        this.primarySymmetry = 0;
-        this.secondarySymmetry = 0; // second symmetry layer for interference patterns
-        this.baseHue         = 0;
-        this.complexity      = 0;
-        this.connectionSkip  = 1;   // how many points to skip when drawing connections
-        this.projectionType  = 0;   // 0=orthographic, 1=stereographic, 2=cylindrical
-        this.lissajousA      = 3;   // Lissajous frequency ratio numerator
-        this.lissajousB      = 2;   // Lissajous frequency ratio denominator
-        this.lissajousDelta  = 0;   // Lissajous phase offset
+        // Structural parameters — seeded from hash in generate()
+        this.numRings          = 0;
+        this.primarySymmetry   = 0;
+        this.secondarySymmetry = 0;
+        this.baseHue           = 0;
+        this.complexity        = 0;
+        this.connectionSkip    = 1;
+        this.projectionType    = 0;
+        this.lissajousA        = 3;
+        this.lissajousB        = 2;
+        this.lissajousDelta    = 0;
 
-        this.hashNumbers  = [];
-        this.fullHash     = '';
+        // 3D rotation angles — all three axes, all hash-seeded speeds
+        this.rotX = 0; // tilt forward/backward
+        this.rotY = 0; // tilt left/right
+        this.rotZ = 0; // spin counterclockwise (existing)
+
+        // Hash-seeded rotation speeds for each axis.
+        // Z is negative for counterclockwise. X and Y oscillate to create
+        // a tumbling rather than a continuous roll on those axes.
+        this.speedX = 0;
+        this.speedY = 0;
+        this.speedZ = -0.005; // base counterclockwise Z speed
+
+        // Tilt amplitude — how far the mandala tilts on X and Y axes.
+        // Expressed in radians. Small values (0.1-0.4) look cosmic and subtle.
+        // Large values (>0.6) would make it flip completely — too disorienting.
+        this.tiltAmplitudeX = 0.2;
+        this.tiltAmplitudeY = 0.2;
+
+        this.hashNumbers   = [];
+        this.fullHash      = '';
         this.intentionText = '';
-        this.showHash     = true;
+        this.showHash      = true;
 
         this.pulseAmplitude = 0.10;
         this.pulseSpeed     = 0.02;
-        this.rotationAngle  = 0;
 
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
@@ -60,49 +77,55 @@ class MandalaGenerator {
         this.centerY       = this.canvas.height / 2;
     }
 
-    // Extracts all visual parameters from specific hash byte positions.
-    // Bytes 0-4: structure. Bytes 5-9: infinite geometry layer. Bytes 10-11: breathing.
-    // Using non-sequential byte positions reduces correlation between parameters.
+    // Extracts all visual and motion parameters from hash bytes.
+    // Bytes 0-4: structure. Bytes 5-9: infinite geometry. Bytes 10-11: breathing.
+    // Bytes 15-19: 3D rotation speeds and tilt amplitudes.
     async generate(intentionText) {
         this.intentionText = intentionText;
         const hash         = await generateHash(intentionText);
         this.hashNumbers   = hexToNumbers(hash);
         this.fullHash      = hash;
 
-        // --- Structural parameters (navigational foundation) ---
+        // Structural parameters
         const numPoints          = 8  + (this.hashNumbers[0] % 8);
         this.numRings            = 3  + (this.hashNumbers[1] % 5);
         this.primarySymmetry     = [6, 8, 12, 16][this.hashNumbers[2] % 4];
         this.baseHue             = this.hashNumbers[3] % 360;
         this.complexity          = 1  + (this.hashNumbers[4] % 3);
 
-        // --- Infinite geometry parameters ---
-
-        // Connection skip: 1-7. Skip 1=consecutive lines, 2=star polygons,
-        // 3-4=complex overlapping forms, 5-7=alien geometric families.
-        // Higher skips create forms that have no common name in geometry.
-        this.connectionSkip = 1 + (this.hashNumbers[5] % 7);
-
-        // Secondary symmetry creates interference with primary symmetry.
-        // Chosen from a different set than primary to maximize visual contrast.
+        // Infinite geometry parameters
+        this.connectionSkip    = 1 + (this.hashNumbers[5] % 7);
         this.secondarySymmetry = [3, 5, 7, 9][this.hashNumbers[6] % 4];
+        this.projectionType    = this.hashNumbers[7] % 3;
+        const lissajousPairs   = [[3,2],[4,3],[5,4],[5,3],[7,4],[6,5]];
+        const pair             = lissajousPairs[this.hashNumbers[8] % lissajousPairs.length];
+        this.lissajousA        = pair[0];
+        this.lissajousB        = pair[1];
+        this.lissajousDelta    = (this.hashNumbers[9] / 255) * Math.PI;
 
-        // Projection type determines how spherical coordinates map to 2D.
-        // Same points, radically different shapes depending on projection chosen.
-        this.projectionType = this.hashNumbers[7] % 3;
-
-        // Lissajous parameters — frequency ratios produce different knot families.
-        // Ratio 3:2 = trefoil, 4:3 = quadrefoil, 5:4 = complex knot, etc.
-        const lissajousPairs = [[3,2],[4,3],[5,4],[5,3],[7,4],[6,5]];
-        const pair           = lissajousPairs[this.hashNumbers[8] % lissajousPairs.length];
-        this.lissajousA      = pair[0];
-        this.lissajousB      = pair[1];
-        this.lissajousDelta  = (this.hashNumbers[9] / 255) * Math.PI; // 0 to π phase
-
-        // --- Breathing parameters ---
+        // Breathing parameters
         this.pulseAmplitude = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
         this.pulseSpeed     = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
-        this.rotationAngle  = 0;
+
+        // 3D rotation parameters — each intention tumbles at its own unique rate.
+        // X and Y speeds are small so the tilt feels like drifting in space,
+        // not like a spinning top. Divided by 2000 keeps them in the 0.0005-0.001 range.
+        this.speedX = (this.hashNumbers[15] / 255) * 0.0008 + 0.0002;
+        this.speedY = (this.hashNumbers[16] / 255) * 0.0008 + 0.0002;
+
+        // Tilt amplitude — how far it tilts. Range 0.15-0.45 radians.
+        // This keeps the tilt visible but never flips the mandala upside down.
+        this.tiltAmplitudeX = 0.15 + (this.hashNumbers[17] / 255) * 0.30;
+        this.tiltAmplitudeY = 0.15 + (this.hashNumbers[18] / 255) * 0.30;
+
+        // Phase offset between X and Y tilts — prevents them from syncing up
+        // into a simple back-and-forth. Creates more complex orbital motion.
+        this.tiltPhaseOffset = (this.hashNumbers[19] / 255) * Math.PI * 2;
+
+        // Reset all rotation angles for fresh start
+        this.rotX = 0;
+        this.rotY = 0;
+        this.rotZ = 0;
 
         this.points = [];
         for (let i = 0; i < numPoints; i++) {
@@ -112,72 +135,93 @@ class MandalaGenerator {
         return hash;
     }
 
-    // Projects one spherical point to 2D using the hash-selected projection type.
-    // Orthographic preserves circular form. Stereographic stretches outer points outward.
-    // Cylindrical wraps the sphere onto a cylinder, producing very different edge behavior.
-    projectPoint(lon, lat, radius, scale) {
-        const phi   = (90 - lat)  * (Math.PI / 180);
-        const theta = (lon + 180) * (Math.PI / 180);
+    // Applies a full 3D rotation matrix to a point in Cartesian space.
+    // Rotation order: X first, then Y, then Z.
+    // Returns the final 2D screen coordinates after perspective projection.
+    // perspectiveDistance controls how strong the perspective effect is —
+    // higher values = flatter (more orthographic), lower = more dramatic perspective.
+    rotate3D(x, y, z, rotX, rotY, rotZ) {
+        // --- X axis rotation (tilt forward/backward) ---
+        const cosX = Math.cos(rotX);
+        const sinX = Math.sin(rotX);
+        const y1   = y * cosX - z * sinX;
+        const z1   = y * sinX + z * cosX;
 
-        if (this.projectionType === 1) {
-            // Stereographic — outer points stretched away from center
-            const k = 2 / (1 + Math.cos(phi));
-            return {
-                x: k * Math.sin(phi) * Math.cos(theta) * scale * radius,
-                y: k * Math.sin(phi) * Math.sin(theta) * scale * radius
-            };
-        } else if (this.projectionType === 2) {
-            // Cylindrical — longitude maps linearly, latitude compresses poles
-            return {
-                x: theta / Math.PI * scale * radius,
-                y: Math.log(Math.tan(phi / 2 + 0.001)) * scale * radius * 0.3
-            };
-        } else {
-            // Orthographic — the original navigational projection (default)
-            return {
-                x: Math.sin(phi) * Math.cos(theta) * scale * radius,
-                y: Math.sin(phi) * Math.sin(theta) * scale * radius
-            };
-        }
-    }
+        // --- Y axis rotation (tilt left/right) ---
+        const cosY = Math.cos(rotY);
+        const sinY = Math.sin(rotY);
+        const x2   = x  * cosY + z1 * sinY;
+        const z2   = -x * sinY + z1 * cosY;
 
-    // Rotates a 2D point counterclockwise around canvas center.
-    // Applied directly to coordinates rather than canvas context to prevent
-    // the optical illusion that plagued the earlier ctx.rotate() approach.
-    rotatePoint(x, y, angle) {
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const dx  = x - this.centerX;
-        const dy  = y - this.centerY;
+        // --- Z axis rotation (counterclockwise spin) ---
+        const cosZ = Math.cos(rotZ);
+        const sinZ = Math.sin(rotZ);
+        const x3   = x2 * cosZ - y1 * sinZ;
+        const y3   = x2 * sinZ + y1 * cosZ;
+
+        // Perspective projection — objects further away (positive z2) appear smaller.
+        // perspectiveDistance of 800 gives a subtle but clear depth effect.
+        const perspectiveDistance = 800;
+        const perspective = perspectiveDistance / (perspectiveDistance + z2);
+
         return {
-            x: this.centerX + dx * cos - dy * sin,
-            y: this.centerY + dx * sin + dy * cos
+            x: x3 * perspective,
+            y: y3 * perspective,
+            z: z2,           // preserved for depth sorting and size scaling
+            perspective      // scaling factor — smaller when further away
         };
     }
 
-    // Draws the Lissajous overlay — a second geometric layer independent of the
-    // spherical point system. Lissajous curves are parametric curves defined by
-    // x = sin(a·t + δ), y = sin(b·t), where a:b ratio determines the knot family.
-    // The hash seeds a, b, and δ so each intention gets a unique knot form.
-    drawLissajous(pulse, hue) {
-        const steps  = 200;
-        const scale  = Math.min(this.canvas.width, this.canvas.height) * 0.35 * pulse;
-        const alpha  = 0.25; // subtle — supports rather than dominates the main geometry
+    // Projects one spherical point using the hash-selected projection type,
+    // then applies the full 3D rotation matrix.
+    projectAndRotate3D(lon, lat, radius, scale, rotX, rotY, rotZ) {
+        const phi   = (90 - lat)  * (Math.PI / 180);
+        const theta = (lon + 180) * (Math.PI / 180);
+
+        let x, y, z;
+
+        if (this.projectionType === 1) {
+            // Stereographic
+            const k = 2 / (1 + Math.cos(phi));
+            x = k * Math.sin(phi) * Math.cos(theta) * scale * radius;
+            y = k * Math.sin(phi) * Math.sin(theta) * scale * radius;
+            z = 0;
+        } else if (this.projectionType === 2) {
+            // Cylindrical
+            x = theta / Math.PI * scale * radius;
+            y = Math.log(Math.tan(phi / 2 + 0.001)) * scale * radius * 0.3;
+            z = 0;
+        } else {
+            // Orthographic — preserves the 3D sphere structure most naturally
+            // for 3D rotation, since points already have implied depth from radius
+            x = Math.sin(phi) * Math.cos(theta) * scale * radius;
+            y = Math.sin(phi) * Math.sin(theta) * scale * radius;
+            z = Math.cos(phi) * scale * radius; // depth from sphere surface
+        }
+
+        return this.rotate3D(x, y, z, rotX, rotY, rotZ);
+    }
+
+    // Draws the Lissajous overlay with 3D rotation applied.
+    drawLissajous(pulse, hue, rotX, rotY, rotZ) {
+        const steps = 200;
+        const scale = Math.min(this.canvas.width, this.canvas.height) * 0.35 * pulse;
+        const alpha = 0.25;
 
         this.ctx.beginPath();
         for (let i = 0; i <= steps; i++) {
-            const t = (i / steps) * Math.PI * 2;
+            const t    = (i / steps) * Math.PI * 2;
             const rawX = Math.sin(this.lissajousA * t + this.lissajousDelta) * scale;
             const rawY = Math.sin(this.lissajousB * t) * scale;
 
-            const rotated = this.rotatePoint(
-                this.centerX + rawX,
-                this.centerY + rawY,
-                this.rotationAngle * 0.7 // rotates slightly slower than main geometry
-            );
+            // Apply 3D rotation to Lissajous points at slower rate for visual separation
+            const p = this.rotate3D(rawX, rawY, 0, rotX * 0.5, rotY * 0.5, rotZ * 0.7);
 
-            if (i === 0) this.ctx.moveTo(rotated.x, rotated.y);
-            else         this.ctx.lineTo(rotated.x, rotated.y);
+            const screenX = this.centerX + p.x;
+            const screenY = this.centerY + p.y;
+
+            if (i === 0) this.ctx.moveTo(screenX, screenY);
+            else         this.ctx.lineTo(screenX, screenY);
         }
 
         this.ctx.strokeStyle = `hsla(${(hue + 120) % 360}, 60%, 55%, ${alpha})`;
@@ -188,9 +232,7 @@ class MandalaGenerator {
         this.ctx.shadowBlur  = 0;
     }
 
-    // Renders one frame. Depth-of-field parallax applies per-ring rotation scaling.
-    // Two symmetry layers draw simultaneously, creating interference geometry.
-    // Connection skip determines which point pairs are connected.
+    // Renders one frame with full 3D rotation applied to all geometry.
     drawMandala(pulse) {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -198,89 +240,83 @@ class MandalaGenerator {
         const scale = Math.min(this.canvas.width, this.canvas.height) / 3;
         const hue   = (this.baseHue + this.time * 10) % 360;
 
-        // Draw Lissajous overlay first so main geometry renders on top
-        this.drawLissajous(pulse, hue);
+        // Draw Lissajous first so main geometry renders on top
+        this.drawLissajous(pulse, hue, this.rotX, this.rotY, this.rotZ);
 
         for (let ring = this.numRings - 1; ring >= 0; ring--) {
             const ringRadius = (ring + 1) / this.numRings;
             const alpha      = 0.3 + (ring / this.numRings) * 0.5;
             const ringHue    = (hue + ring * 30) % 360;
 
-            // Parallax depth factor — inner rings rotate faster than outer rings
-            const depth        = ring / (this.numRings - 1);
-            const depthFactor  = 0.3 + depth * 1.5;
-            const ringRotation = this.rotationAngle * depthFactor;
+            // Parallax depth — inner rings rotate faster on all three axes
+            const depth       = ring / (this.numRings - 1);
+            const depthFactor = 0.3 + depth * 1.5;
 
-            // Draw both symmetry layers — primary and secondary simultaneously
+            // Each ring gets its own rotation angles scaled by depth factor
+            const ringRotX = this.rotX * depthFactor;
+            const ringRotY = this.rotY * depthFactor;
+            const ringRotZ = this.rotZ * depthFactor;
+
             const symmetries = [this.primarySymmetry, this.secondarySymmetry];
 
             symmetries.forEach((symmetry, symLayerIdx) => {
-                // Secondary layer uses complementary hue and lower alpha for distinction
                 const layerHue   = symLayerIdx === 0 ? ringHue : (ringHue + 180) % 360;
                 const layerAlpha = symLayerIdx === 0 ? alpha : alpha * 0.5;
 
                 for (let sym = 0; sym < symmetry; sym++) {
                     const symAngle = (Math.PI * 2 * sym) / symmetry;
+                    const cosS     = Math.cos(symAngle);
+                    const sinS     = Math.sin(symAngle);
 
                     for (let i = 0; i < this.points.length; i++) {
                         const point = this.points[i];
 
-                        const base = this.projectPoint(
+                        // Get 3D rotated position
+                        const p3d = this.projectAndRotate3D(
                             point.longitude, point.latitude,
                             point.radius * ringRadius * pulse,
-                            scale
+                            scale, ringRotX, ringRotY, ringRotZ
                         );
 
-                        const symRotated = this.rotatePoint(
-                            this.centerX + base.x,
-                            this.centerY + base.y,
-                            symAngle
-                        );
+                        // Apply symmetry rotation in 2D after 3D projection
+                        const sx = p3d.x * cosS - p3d.y * sinS;
+                        const sy = p3d.x * sinS + p3d.y * cosS;
 
-                        const final = this.rotatePoint(
-                            symRotated.x, symRotated.y,
-                            ringRotation
-                        );
+                        const screenX = this.centerX + sx;
+                        const screenY = this.centerY + sy;
 
-                        // Dot size and glow scale with depth for 3D illusion
-                        const depthSize = (2 + this.complexity) * pulse * (0.7 + depth * 0.6);
+                        // Scale dot size by perspective — points further away appear smaller
+                        const depthSize = (2 + this.complexity) * pulse *
+                                          (0.7 + depth * 0.6) * p3d.perspective;
+
                         this.ctx.beginPath();
-                        this.ctx.arc(final.x, final.y, depthSize, 0, Math.PI * 2);
-                        this.ctx.fillStyle  = `hsla(${layerHue}, 70%, 60%, ${layerAlpha})`;
-                        this.ctx.shadowBlur = 10 * pulse * (0.5 + depth * 0.8);
+                        this.ctx.arc(screenX, screenY, Math.max(0.5, depthSize), 0, Math.PI * 2);
+                        this.ctx.fillStyle   = `hsla(${layerHue}, 70%, 60%, ${layerAlpha})`;
+                        this.ctx.shadowBlur  = 10 * pulse * (0.5 + depth * 0.8);
                         this.ctx.shadowColor = `hsla(${layerHue}, 80%, 70%, ${layerAlpha})`;
                         this.ctx.fill();
 
-                        // Variable skip connections — the skip value determines
-                        // which point pairs connect, producing different polygon families.
-                        // Wraps around using modulo so all points remain connected in a cycle.
+                        // Variable skip connections with 3D perspective scaling
                         const targetIdx = (i + this.connectionSkip) % this.points.length;
                         if (targetIdx !== i) {
-                            const targetPoint = this.points[targetIdx];
-                            const targetBase  = this.projectPoint(
-                                targetPoint.longitude, targetPoint.latitude,
-                                targetPoint.radius * ringRadius * pulse,
-                                scale
-                            );
-                            const targetSymRotated = this.rotatePoint(
-                                this.centerX + targetBase.x,
-                                this.centerY + targetBase.y,
-                                symAngle
-                            );
-                            const targetFinal = this.rotatePoint(
-                                targetSymRotated.x, targetSymRotated.y,
-                                ringRotation
+                            const tp = this.points[targetIdx];
+                            const tp3d = this.projectAndRotate3D(
+                                tp.longitude, tp.latitude,
+                                tp.radius * ringRadius * pulse,
+                                scale, ringRotX, ringRotY, ringRotZ
                             );
 
-                            // Bezier control point pulled toward center approximates geodesic curvature
-                            const cpX = (final.x + targetFinal.x) / 2 * (0.85 - ring * 0.03) +
+                            const tx = tp3d.x * cosS - tp3d.y * sinS;
+                            const ty = tp3d.x * sinS + tp3d.y * cosS;
+
+                            const cpX = (screenX + this.centerX + tx) / 2 * (0.85 - ring * 0.03) +
                                         this.centerX * (1 - (0.85 - ring * 0.03));
-                            const cpY = (final.y + targetFinal.y) / 2 * (0.85 - ring * 0.03) +
+                            const cpY = (screenY + this.centerY + ty) / 2 * (0.85 - ring * 0.03) +
                                         this.centerY * (1 - (0.85 - ring * 0.03));
 
                             this.ctx.beginPath();
-                            this.ctx.moveTo(final.x, final.y);
-                            this.ctx.quadraticCurveTo(cpX, cpY, targetFinal.x, targetFinal.y);
+                            this.ctx.moveTo(screenX, screenY);
+                            this.ctx.quadraticCurveTo(cpX, cpY, this.centerX + tx, this.centerY + ty);
                             this.ctx.strokeStyle = `hsla(${layerHue}, 60%, 50%, ${layerAlpha * 0.5})`;
                             this.ctx.lineWidth   = 1;
                             this.ctx.shadowBlur  = 5;
@@ -291,14 +327,14 @@ class MandalaGenerator {
             });
         }
 
-        // Center dot — visual anchor, brightest point in the composition
+        // Center dot
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, 5 * pulse, 0, Math.PI * 2);
-        this.ctx.fillStyle  = `hsl(${this.baseHue}, 80%, 70%)`;
-        this.ctx.shadowBlur = 15 * pulse;
+        this.ctx.fillStyle   = `hsl(${this.baseHue}, 80%, 70%)`;
+        this.ctx.shadowBlur  = 15 * pulse;
         this.ctx.shadowColor = `hsl(${this.baseHue}, 80%, 70%)`;
         this.ctx.fill();
-        this.ctx.shadowBlur = 0;
+        this.ctx.shadowBlur  = 0;
 
         // --- TOP RIGHT: Cryptographic signature ---
         if (this.showHash && this.fullHash) {
@@ -315,8 +351,6 @@ class MandalaGenerator {
         }
 
         // --- BOTTOM LEFT: Intention text ---
-        // Rendered last so it always sits above the animation layers.
-        // 50-word limit enforced upstream in app.js.
         if (this.intentionText) {
             this.ctx.save();
             const fontSize = Math.max(9, Math.floor(this.canvas.width / 55));
@@ -353,14 +387,21 @@ class MandalaGenerator {
         }
     }
 
-    // Animation loop — hash-seeded breathing with depth-of-field parallax rotation.
-    // rotationAngle decrements each frame for counterclockwise movement.
+    // Animation loop with hash-seeded breathing and full 3D rotation.
+    // X and Y axes use sine wave oscillation — the mandala tilts and returns
+    // rather than rolling continuously, creating a drifting orbital quality.
+    // Z axis decrements continuously for counterclockwise spin.
     startBreathing() {
-        const rotationStep = -0.005;
-
         const animate = () => {
             this.time += this.pulseSpeed;
-            this.rotationAngle += rotationStep;
+
+            // Z axis: continuous counterclockwise spin
+            this.rotZ += this.speedZ;
+
+            // X and Y axes: sinusoidal oscillation creates drifting tilt.
+            // Phase offset between X and Y prevents them locking into simple patterns.
+            this.rotX = Math.sin(this.time * this.speedX * 100) * this.tiltAmplitudeX;
+            this.rotY = Math.sin(this.time * this.speedY * 100 + this.tiltPhaseOffset) * this.tiltAmplitudeY;
 
             const pulse = 1.0 +
                 Math.sin(this.time) * this.pulseAmplitude +
@@ -372,8 +413,6 @@ class MandalaGenerator {
         animate();
     }
 
-    // Stops animation. Always call before generating a new mandala to prevent
-    // multiple loops running simultaneously.
     stopBreathing() {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
@@ -381,8 +420,7 @@ class MandalaGenerator {
         }
     }
 
-    // Spiral dissolve — shrinks and rotates mandala inward over the given duration.
-    // Called by app.js when the meditation timer completes.
+    // Spiral dissolve with 3D rotation accelerating as it collapses inward
     spiralDissolve(duration) {
         this.stopBreathing();
 
@@ -393,7 +431,11 @@ class MandalaGenerator {
         const dissolve = setInterval(() => {
             step++;
             const scale = Math.max(0.001, 1 - (step / steps));
-            this.rotationAngle -= step * 0.01;
+
+            // Accelerate all three rotation axes during dissolve
+            this.rotZ -= step * 0.01;
+            this.rotX += step * 0.005;
+            this.rotY += step * 0.005;
 
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
