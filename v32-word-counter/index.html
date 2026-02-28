@@ -127,24 +127,16 @@
                     <button class="primary-btn" id="newSessionBtn">Begin New Session</button>
                 </div>
 
-                <!-- Controls row: mute only — download and GIF export removed for cleaner UI -->
-                <div class="controls">
-                    <button class="secondary-btn" id="muteBtn">🔊 Mute Audio</button>
-                </div>
-            </section>
-        </main>
-
-        <footer>
-            <p style="font-size: 1.2em; font-weight: bold; color: #f39c12; margin-bottom: 10px;">
-                The Intention Keeper • v3.2 • For the Good of All Humanity
-            </p>
-            <p style="color: #95a5a6;">
-                Transcendence Detection • SHA-256 Mathematics • No Dogma • Pure Transformation
-            </p>
-        </footer>
-    </div>
-
-    <!-- Script load order matters:
+		<!-- Controls row: style toggle and mute only -->
+		<div class="controls">
+    			<div class="style-toggle">
+        			<button class="style-btn active" id="sacredBtn">⚓ Sacred</button>
+        			<button class="style-btn" id="cosmicBtn">✦ Cosmic</button>
+    			</div>
+    			<button class="secondary-btn" id="muteBtn">🔊 Mute Audio</button>
+</div>
+        
+<!-- Script load order matters:
          hash-encoder must load before mandala (spherical coord functions)
          audio must load before app (AudioEngine instantiated in app.js)
          app loads last as it depends on all other modules -->

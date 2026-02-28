@@ -712,3 +712,42 @@ footer {
 #startTimerBtn {
     margin-top: 10px;
 }
+/* =============================================================
+   SACRED / COSMIC STYLE TOGGLE
+   Purpose: Two-button toggle that switches the mandala between
+   the clean Sacred style and the dense Cosmic style.
+   Active button fills gold to indicate the current style.
+   ============================================================= */
+
+/* Wrapper groups the two toggle buttons side by side */
+.style-toggle {
+    display: flex;
+    gap: 8px;
+}
+
+/* Base style for both toggle buttons — outlined gold, matches secondary-btn aesthetic */
+.style-btn {
+    padding: 12px 20px;
+    background: rgba(243, 156, 18, 0.1);
+    border: 2px solid rgba(243, 156, 18, 0.4);
+    border-radius: 8px;
+    color: #95a5a6;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.style-btn:hover {
+    background: rgba(243, 156, 18, 0.2);
+    border-color: rgba(243, 156, 18, 0.7);
+    color: #f39c12;
+}
+
+/* Active state — filled gold, clearly indicates selected style */
+.style-btn.active {
+    background: rgba(243, 156, 18, 0.35);
+    border-color: #f39c12;
+    color: #f39c12;
+    box-shadow: 0 0 12px rgba(243, 156, 18, 0.3);
+}

@@ -92,7 +92,23 @@ document.addEventListener('DOMContentLoaded', function() {
         await generateMandala(currentIntention);
     });
 
-    // --- MUTE / UNMUTE ---
+    // --- STYLE TOGGLE ---
+    // Switches between Sacred and Cosmic rendering styles instantly.
+    // No re-hashing needed — setStyle() reuses the stored hash parameters.
+    const sacredBtn = document.getElementById('sacredBtn');
+    const cosmicBtn = document.getElementById('cosmicBtn');
+
+    sacredBtn.addEventListener('click', function() {
+        mandalaGen.setStyle('sacred');
+        sacredBtn.classList.add('active');
+        cosmicBtn.classList.remove('active');
+    });
+
+    cosmicBtn.addEventListener('click', function() {
+        mandalaGen.setStyle('cosmic');
+        cosmicBtn.classList.add('active');
+        sacredBtn.classList.remove('active');
+    });// --- MUTE / UNMUTE ---
     muteBtn.addEventListener('click', function() {
         if (!audioEngine) return;
         const isMuted       = audioEngine.toggleMute();

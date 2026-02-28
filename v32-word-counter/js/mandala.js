@@ -1,23 +1,23 @@
 // mandala.js - Sacred geometry renderer for the Intention Keeper
 //
-// FOUNDATION (unchanged):
+// FOUNDATION (unchanged across both styles):
 // All point positions derive from SHA-256 hash bytes mapped to spherical coordinates
 // (longitude, latitude, radius) using the navigator's celestial sphere model and
-// golden ratio distribution. This navigational mathematics is the immutable core.
+// golden ratio distribution. The MERIDIAN-HASH provenance is immutable.
 //
-// INFINITE GEOMETRY LAYER (new):
-// Four additional hash-seeded decisions multiply geometric variety exponentially:
-//   1. Variable connection skip — hash selects how many points to skip when connecting,
-//      producing different polygon families (consecutive, star, complex, alien)
-//   2. Mixed symmetry — hash selects two symmetry values drawn simultaneously,
-//      creating interference patterns impossible with single symmetry
-//   3. Variable projection — hash selects between orthographic, stereographic,
-//      and cylindrical projection of the same spherical points
-//   4. Lissajous overlay — a second geometric layer using sine wave mathematics
-//      seeded from the hash, producing figure-8s, spirals, and knot forms
+// TWO VISUAL STYLES — same hash, same points, different rendering:
 //
-// The same intention always produces the same mandala — all decisions are
-// deterministic functions of the SHA-256 hash. No randomness is introduced.
+// SACRED — clean, minimal, navigational
+//   Single symmetry, consecutive point connections, depth-of-field parallax,
+//   smaller dots, no Lissajous overlay. Honors the original navigational vision.
+//
+// COSMIC — dense, complex, infinite
+//   Mixed dual symmetry, variable connection skip, Lissajous overlay,
+//   larger glowing dots. Expresses the infinite geometric possibilities
+//   of the same mathematical foundation.
+//
+// Style is toggled by the user via a UI button. The mandala regenerates
+// instantly from the stored hash — no re-hashing required on style change.
 
 class MandalaGenerator {
     constructor(canvas) {
@@ -27,26 +27,29 @@ class MandalaGenerator {
         this.time   = 0;
         this.points = [];
 
-        // Structural parameters — all seeded from hash in generate()
-        this.numRings        = 0;
-        this.primarySymmetry = 0;
-        this.secondarySymmetry = 0; // second symmetry layer for interference patterns
-        this.baseHue         = 0;
-        this.complexity      = 0;
-        this.connectionSkip  = 1;   // how many points to skip when drawing connections
-        this.projectionType  = 0;   // 0=orthographic, 1=stereographic, 2=cylindrical
-        this.lissajousA      = 3;   // Lissajous frequency ratio numerator
-        this.lissajousB      = 2;   // Lissajous frequency ratio denominator
-        this.lissajousDelta  = 0;   // Lissajous phase offset
+        // Structural parameters — seeded from hash in generate()
+        this.numRings          = 0;
+        this.primarySymmetry   = 0;
+        this.secondarySymmetry = 0;
+        this.baseHue           = 0;
+        this.complexity        = 0;
+        this.connectionSkip    = 1;
+        this.lissajousA        = 3;
+        this.lissajousB        = 2;
+        this.lissajousDelta    = 0;
 
-        this.hashNumbers  = [];
-        this.fullHash     = '';
+        this.hashNumbers   = [];
+        this.fullHash      = '';
         this.intentionText = '';
-        this.showHash     = true;
+        this.showHash      = true;
 
         this.pulseAmplitude = 0.10;
         this.pulseSpeed     = 0.02;
         this.rotationAngle  = 0;
+
+        // Active style — 'sacred' or 'cosmic'. Default is sacred.
+        // Changed by app.js when the user clicks the style toggle button.
+        this.style = 'sacred';
 
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
@@ -60,46 +63,32 @@ class MandalaGenerator {
         this.centerY       = this.canvas.height / 2;
     }
 
-    // Extracts all visual parameters from specific hash byte positions.
-    // Bytes 0-4: structure. Bytes 5-9: infinite geometry layer. Bytes 10-11: breathing.
-    // Using non-sequential byte positions reduces correlation between parameters.
+    // Hashes the intention and extracts all visual parameters.
+    // Both styles share the same hash and point positions —
+    // only the rendering decisions differ between Sacred and Cosmic.
     async generate(intentionText) {
         this.intentionText = intentionText;
         const hash         = await generateHash(intentionText);
         this.hashNumbers   = hexToNumbers(hash);
         this.fullHash      = hash;
 
-        // --- Structural parameters (navigational foundation) ---
+        // Structural parameters — shared by both styles
         const numPoints          = 8  + (this.hashNumbers[0] % 8);
         this.numRings            = 3  + (this.hashNumbers[1] % 5);
         this.primarySymmetry     = [6, 8, 12, 16][this.hashNumbers[2] % 4];
         this.baseHue             = this.hashNumbers[3] % 360;
         this.complexity          = 1  + (this.hashNumbers[4] % 3);
 
-        // --- Infinite geometry parameters ---
-
-        // Connection skip: 1-7. Skip 1=consecutive lines, 2=star polygons,
-        // 3-4=complex overlapping forms, 5-7=alien geometric families.
-        // Higher skips create forms that have no common name in geometry.
-        this.connectionSkip = 1 + (this.hashNumbers[5] % 7);
-
-        // Secondary symmetry creates interference with primary symmetry.
-        // Chosen from a different set than primary to maximize visual contrast.
+        // Cosmic-only parameters — extracted always but only used when style = 'cosmic'
+        this.connectionSkip    = 1 + (this.hashNumbers[5] % 7);
         this.secondarySymmetry = [3, 5, 7, 9][this.hashNumbers[6] % 4];
+        const lissajousPairs   = [[3,2],[4,3],[5,4],[5,3],[7,4],[6,5]];
+        const pair             = lissajousPairs[this.hashNumbers[8] % lissajousPairs.length];
+        this.lissajousA        = pair[0];
+        this.lissajousB        = pair[1];
+        this.lissajousDelta    = (this.hashNumbers[9] / 255) * Math.PI;
 
-        // Projection type determines how spherical coordinates map to 2D.
-        // Same points, radically different shapes depending on projection chosen.
-        this.projectionType = this.hashNumbers[7] % 3;
-
-        // Lissajous parameters — frequency ratios produce different knot families.
-        // Ratio 3:2 = trefoil, 4:3 = quadrefoil, 5:4 = complex knot, etc.
-        const lissajousPairs = [[3,2],[4,3],[5,4],[5,3],[7,4],[6,5]];
-        const pair           = lissajousPairs[this.hashNumbers[8] % lissajousPairs.length];
-        this.lissajousA      = pair[0];
-        this.lissajousB      = pair[1];
-        this.lissajousDelta  = (this.hashNumbers[9] / 255) * Math.PI; // 0 to π phase
-
-        // --- Breathing parameters ---
+        // Breathing parameters — shared by both styles
         this.pulseAmplitude = 0.05 + (this.hashNumbers[10] / 255) * 0.15;
         this.pulseSpeed     = 0.015 + (this.hashNumbers[11] / 255) * 0.03;
         this.rotationAngle  = 0;
@@ -112,38 +101,26 @@ class MandalaGenerator {
         return hash;
     }
 
-    // Projects one spherical point to 2D using the hash-selected projection type.
-    // Orthographic preserves circular form. Stereographic stretches outer points outward.
-    // Cylindrical wraps the sphere onto a cylinder, producing very different edge behavior.
+    // Switches between Sacred and Cosmic styles and redraws immediately.
+    // Called by app.js when the user clicks the style toggle button.
+    // No re-hashing needed — all parameters are already stored.
+    setStyle(styleName) {
+        this.style = styleName;
+    }
+
+    // Orthographic projection — the navigational projection used by both styles.
+    // Preserves the circular, celestial sphere appearance of the mandala.
     projectPoint(lon, lat, radius, scale) {
         const phi   = (90 - lat)  * (Math.PI / 180);
         const theta = (lon + 180) * (Math.PI / 180);
-
-        if (this.projectionType === 1) {
-            // Stereographic — outer points stretched away from center
-            const k = 2 / (1 + Math.cos(phi));
-            return {
-                x: k * Math.sin(phi) * Math.cos(theta) * scale * radius,
-                y: k * Math.sin(phi) * Math.sin(theta) * scale * radius
-            };
-        } else if (this.projectionType === 2) {
-            // Cylindrical — longitude maps linearly, latitude compresses poles
-            return {
-                x: theta / Math.PI * scale * radius,
-                y: Math.log(Math.tan(phi / 2 + 0.001)) * scale * radius * 0.3
-            };
-        } else {
-            // Orthographic — the original navigational projection (default)
-            return {
-                x: Math.sin(phi) * Math.cos(theta) * scale * radius,
-                y: Math.sin(phi) * Math.sin(theta) * scale * radius
-            };
-        }
+        return {
+            x: Math.sin(phi) * Math.cos(theta) * scale * radius,
+            y: Math.sin(phi) * Math.sin(theta) * scale * radius
+        };
     }
 
-    // Rotates a 2D point counterclockwise around canvas center.
-    // Applied directly to coordinates rather than canvas context to prevent
-    // the optical illusion that plagued the earlier ctx.rotate() approach.
+    // Rotates a point counterclockwise around canvas center.
+    // Direct coordinate rotation prevents the optical illusion caused by ctx.rotate().
     rotatePoint(x, y, angle) {
         const cos = Math.cos(angle);
         const sin = Math.sin(angle);
@@ -155,27 +132,23 @@ class MandalaGenerator {
         };
     }
 
-    // Draws the Lissajous overlay — a second geometric layer independent of the
-    // spherical point system. Lissajous curves are parametric curves defined by
-    // x = sin(a·t + δ), y = sin(b·t), where a:b ratio determines the knot family.
-    // The hash seeds a, b, and δ so each intention gets a unique knot form.
+    // Lissajous overlay — only drawn in Cosmic style.
+    // Provides a second independent geometric layer beneath the main mandala.
     drawLissajous(pulse, hue) {
-        const steps  = 200;
-        const scale  = Math.min(this.canvas.width, this.canvas.height) * 0.35 * pulse;
-        const alpha  = 0.25; // subtle — supports rather than dominates the main geometry
+        const steps = 200;
+        const scale = Math.min(this.canvas.width, this.canvas.height) * 0.35 * pulse;
+        const alpha = 0.25;
 
         this.ctx.beginPath();
         for (let i = 0; i <= steps; i++) {
-            const t = (i / steps) * Math.PI * 2;
-            const rawX = Math.sin(this.lissajousA * t + this.lissajousDelta) * scale;
-            const rawY = Math.sin(this.lissajousB * t) * scale;
-
+            const t      = (i / steps) * Math.PI * 2;
+            const rawX   = Math.sin(this.lissajousA * t + this.lissajousDelta) * scale;
+            const rawY   = Math.sin(this.lissajousB * t) * scale;
             const rotated = this.rotatePoint(
                 this.centerX + rawX,
                 this.centerY + rawY,
-                this.rotationAngle * 0.7 // rotates slightly slower than main geometry
+                this.rotationAngle * 0.7
             );
-
             if (i === 0) this.ctx.moveTo(rotated.x, rotated.y);
             else         this.ctx.lineTo(rotated.x, rotated.y);
         }
@@ -188,117 +161,110 @@ class MandalaGenerator {
         this.ctx.shadowBlur  = 0;
     }
 
-    // Renders one frame. Depth-of-field parallax applies per-ring rotation scaling.
-    // Two symmetry layers draw simultaneously, creating interference geometry.
-    // Connection skip determines which point pairs are connected.
+    // Draws one ring of geometry for either style.
+    // Sacred uses single symmetry and consecutive connections.
+    // Cosmic uses dual symmetry, variable skip connections, and larger dots.
+    drawRing(ring, pulse, hue) {
+        const ringRadius = (ring + 1) / this.numRings;
+        const alpha      = 0.3 + (ring / this.numRings) * 0.5;
+        const ringHue    = (hue + ring * 30) % 360;
+        const scale      = Math.min(this.canvas.width, this.canvas.height) / 3;
+
+        // Parallax depth — inner rings rotate faster regardless of style
+        const depth        = ring / (this.numRings - 1 || 1);
+        const depthFactor  = 0.3 + depth * 1.5;
+        const ringRotation = this.rotationAngle * depthFactor;
+
+        // Sacred uses only primary symmetry. Cosmic adds a secondary layer.
+        const symmetries = this.style === 'cosmic'
+            ? [this.primarySymmetry, this.secondarySymmetry]
+            : [this.primarySymmetry];
+
+        // Sacred connects consecutive points. Cosmic skips based on hash byte 5.
+        const skip = this.style === 'cosmic' ? this.connectionSkip : 1;
+
+        symmetries.forEach((symmetry, symLayerIdx) => {
+            const layerHue   = symLayerIdx === 0 ? ringHue : (ringHue + 180) % 360;
+            const layerAlpha = symLayerIdx === 0 ? alpha : alpha * 0.5;
+
+            for (let sym = 0; sym < symmetry; sym++) {
+                const symAngle = (Math.PI * 2 * sym) / symmetry;
+
+                for (let i = 0; i < this.points.length; i++) {
+                    const point = this.points[i];
+                    const base  = this.projectPoint(
+                        point.longitude, point.latitude,
+                        point.radius * ringRadius * pulse, scale
+                    );
+                    const symRotated = this.rotatePoint(
+                        this.centerX + base.x, this.centerY + base.y, symAngle
+                    );
+                    const final = this.rotatePoint(symRotated.x, symRotated.y, ringRotation);
+
+                    // Sacred dots are smaller and crisper. Cosmic dots glow larger.
+                    const dotScale  = this.style === 'sacred' ? 0.6 : 1.0;
+                    const depthSize = (2 + this.complexity) * pulse * (0.7 + depth * 0.6) * dotScale;
+
+                    this.ctx.beginPath();
+                    this.ctx.arc(final.x, final.y, depthSize, 0, Math.PI * 2);
+                    this.ctx.fillStyle   = `hsla(${layerHue}, 70%, 60%, ${layerAlpha})`;
+                    this.ctx.shadowBlur  = (this.style === 'sacred' ? 6 : 10) * pulse * (0.5 + depth * 0.8);
+                    this.ctx.shadowColor = `hsla(${layerHue}, 80%, 70%, ${layerAlpha})`;
+                    this.ctx.fill();
+
+                    // Draw connections to target point based on skip value
+                    const targetIdx = (i + skip) % this.points.length;
+                    if (targetIdx !== i) {
+                        const tp         = this.points[targetIdx];
+                        const tBase      = this.projectPoint(
+                            tp.longitude, tp.latitude,
+                            tp.radius * ringRadius * pulse, scale
+                        );
+                        const tSymRotated = this.rotatePoint(
+                            this.centerX + tBase.x, this.centerY + tBase.y, symAngle
+                        );
+                        const tFinal = this.rotatePoint(tSymRotated.x, tSymRotated.y, ringRotation);
+
+                        const cpX = (final.x + tFinal.x) / 2 * (0.85 - ring * 0.03) +
+                                    this.centerX * (1 - (0.85 - ring * 0.03));
+                        const cpY = (final.y + tFinal.y) / 2 * (0.85 - ring * 0.03) +
+                                    this.centerY * (1 - (0.85 - ring * 0.03));
+
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(final.x, final.y);
+                        this.ctx.quadraticCurveTo(cpX, cpY, tFinal.x, tFinal.y);
+                        this.ctx.strokeStyle = `hsla(${layerHue}, 60%, 50%, ${layerAlpha * 0.5})`;
+                        this.ctx.lineWidth   = 1;
+                        this.ctx.shadowBlur  = 5;
+                        this.ctx.stroke();
+                    }
+                }
+            }
+        });
+    }
+
     drawMandala(pulse) {
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.95)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        const scale = Math.min(this.canvas.width, this.canvas.height) / 3;
-        const hue   = (this.baseHue + this.time * 10) % 360;
+        const hue = (this.baseHue + this.time * 10) % 360;
 
-        // Draw Lissajous overlay first so main geometry renders on top
-        this.drawLissajous(pulse, hue);
+        // Lissajous only renders in Cosmic style
+        if (this.style === 'cosmic') this.drawLissajous(pulse, hue);
 
+        // Draw rings back to front for correct depth ordering
         for (let ring = this.numRings - 1; ring >= 0; ring--) {
-            const ringRadius = (ring + 1) / this.numRings;
-            const alpha      = 0.3 + (ring / this.numRings) * 0.5;
-            const ringHue    = (hue + ring * 30) % 360;
-
-            // Parallax depth factor — inner rings rotate faster than outer rings
-            const depth        = ring / (this.numRings - 1);
-            const depthFactor  = 0.3 + depth * 1.5;
-            const ringRotation = this.rotationAngle * depthFactor;
-
-            // Draw both symmetry layers — primary and secondary simultaneously
-            const symmetries = [this.primarySymmetry, this.secondarySymmetry];
-
-            symmetries.forEach((symmetry, symLayerIdx) => {
-                // Secondary layer uses complementary hue and lower alpha for distinction
-                const layerHue   = symLayerIdx === 0 ? ringHue : (ringHue + 180) % 360;
-                const layerAlpha = symLayerIdx === 0 ? alpha : alpha * 0.5;
-
-                for (let sym = 0; sym < symmetry; sym++) {
-                    const symAngle = (Math.PI * 2 * sym) / symmetry;
-
-                    for (let i = 0; i < this.points.length; i++) {
-                        const point = this.points[i];
-
-                        const base = this.projectPoint(
-                            point.longitude, point.latitude,
-                            point.radius * ringRadius * pulse,
-                            scale
-                        );
-
-                        const symRotated = this.rotatePoint(
-                            this.centerX + base.x,
-                            this.centerY + base.y,
-                            symAngle
-                        );
-
-                        const final = this.rotatePoint(
-                            symRotated.x, symRotated.y,
-                            ringRotation
-                        );
-
-                        // Dot size and glow scale with depth for 3D illusion
-                        const depthSize = (2 + this.complexity) * pulse * (0.7 + depth * 0.6);
-                        this.ctx.beginPath();
-                        this.ctx.arc(final.x, final.y, depthSize, 0, Math.PI * 2);
-                        this.ctx.fillStyle  = `hsla(${layerHue}, 70%, 60%, ${layerAlpha})`;
-                        this.ctx.shadowBlur = 10 * pulse * (0.5 + depth * 0.8);
-                        this.ctx.shadowColor = `hsla(${layerHue}, 80%, 70%, ${layerAlpha})`;
-                        this.ctx.fill();
-
-                        // Variable skip connections — the skip value determines
-                        // which point pairs connect, producing different polygon families.
-                        // Wraps around using modulo so all points remain connected in a cycle.
-                        const targetIdx = (i + this.connectionSkip) % this.points.length;
-                        if (targetIdx !== i) {
-                            const targetPoint = this.points[targetIdx];
-                            const targetBase  = this.projectPoint(
-                                targetPoint.longitude, targetPoint.latitude,
-                                targetPoint.radius * ringRadius * pulse,
-                                scale
-                            );
-                            const targetSymRotated = this.rotatePoint(
-                                this.centerX + targetBase.x,
-                                this.centerY + targetBase.y,
-                                symAngle
-                            );
-                            const targetFinal = this.rotatePoint(
-                                targetSymRotated.x, targetSymRotated.y,
-                                ringRotation
-                            );
-
-                            // Bezier control point pulled toward center approximates geodesic curvature
-                            const cpX = (final.x + targetFinal.x) / 2 * (0.85 - ring * 0.03) +
-                                        this.centerX * (1 - (0.85 - ring * 0.03));
-                            const cpY = (final.y + targetFinal.y) / 2 * (0.85 - ring * 0.03) +
-                                        this.centerY * (1 - (0.85 - ring * 0.03));
-
-                            this.ctx.beginPath();
-                            this.ctx.moveTo(final.x, final.y);
-                            this.ctx.quadraticCurveTo(cpX, cpY, targetFinal.x, targetFinal.y);
-                            this.ctx.strokeStyle = `hsla(${layerHue}, 60%, 50%, ${layerAlpha * 0.5})`;
-                            this.ctx.lineWidth   = 1;
-                            this.ctx.shadowBlur  = 5;
-                            this.ctx.stroke();
-                        }
-                    }
-                }
-            });
+            this.drawRing(ring, pulse, hue);
         }
 
-        // Center dot — visual anchor, brightest point in the composition
+        // Center dot — anchor point shared by both styles
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, 5 * pulse, 0, Math.PI * 2);
-        this.ctx.fillStyle  = `hsl(${this.baseHue}, 80%, 70%)`;
-        this.ctx.shadowBlur = 15 * pulse;
+        this.ctx.fillStyle   = `hsl(${this.baseHue}, 80%, 70%)`;
+        this.ctx.shadowBlur  = 15 * pulse;
         this.ctx.shadowColor = `hsl(${this.baseHue}, 80%, 70%)`;
         this.ctx.fill();
-        this.ctx.shadowBlur = 0;
+        this.ctx.shadowBlur  = 0;
 
         // --- TOP RIGHT: Cryptographic signature ---
         if (this.showHash && this.fullHash) {
@@ -315,8 +281,6 @@ class MandalaGenerator {
         }
 
         // --- BOTTOM LEFT: Intention text ---
-        // Rendered last so it always sits above the animation layers.
-        // 50-word limit enforced upstream in app.js.
         if (this.intentionText) {
             this.ctx.save();
             const fontSize = Math.max(9, Math.floor(this.canvas.width / 55));
@@ -353,27 +317,21 @@ class MandalaGenerator {
         }
     }
 
-    // Animation loop — hash-seeded breathing with depth-of-field parallax rotation.
-    // rotationAngle decrements each frame for counterclockwise movement.
+    // Animation loop — counterclockwise rotation with hash-seeded breathing.
     startBreathing() {
         const rotationStep = -0.005;
-
         const animate = () => {
             this.time += this.pulseSpeed;
             this.rotationAngle += rotationStep;
-
             const pulse = 1.0 +
                 Math.sin(this.time) * this.pulseAmplitude +
                 Math.sin(this.time * 1.6) * (this.pulseAmplitude * 0.2);
-
             this.drawMandala(pulse);
             this.animationFrame = requestAnimationFrame(animate);
         };
         animate();
     }
 
-    // Stops animation. Always call before generating a new mandala to prevent
-    // multiple loops running simultaneously.
     stopBreathing() {
         if (this.animationFrame) {
             cancelAnimationFrame(this.animationFrame);
@@ -381,11 +339,9 @@ class MandalaGenerator {
         }
     }
 
-    // Spiral dissolve — shrinks and rotates mandala inward over the given duration.
-    // Called by app.js when the meditation timer completes.
+    // Spiral dissolve — shrinks and rotates inward over the given duration.
     spiralDissolve(duration) {
         this.stopBreathing();
-
         const steps    = 60;
         const interval = duration / steps;
         let   step     = 0;
